@@ -12,3 +12,4 @@ sessions.json
 *.p12
 *.keychain-db
 kc.pw
+dist/

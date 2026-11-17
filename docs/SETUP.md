@@ -5,6 +5,10 @@ Do these in order. Each step ends with a check. About 10 minutes in total.
 
 Run commands in Terminal. `macreach` is already on your PATH.
 
+## 0. Using the disk image instead of building from source
+
+If you installed from `MacReach-<version>-arm64.dmg`, skip `install.sh`: Node and Tailscale are inside the app. After dragging MacReach to Applications and getting past macOS's one-time "cannot verify" block (System Settings > Privacy & Security > Open Anyway), the Setup assistant opens and sections 1 to 4 below apply unchanged. In section 4, also turn off Tailscale key expiry for the Mac (the Setup assistant shows the steps). The `macreach` command works from Terminal after the first launch.
+
 ## 1. Grant the two macOS permissions
 
 The MacReach icon is in your menu bar (a monitor; it turns red with "In use" while someone is controlling this Mac). On first launch its **Setup assistant** opens (menu bar icon > Setup assistant… to reopen). Press **Grant…** next to Screen Recording and Accessibility and turn MacReach **on** in the System Settings page that opens. The assistant ticks each row live and the app restarts itself once Screen Recording is on. Optionally press **Allow…** for notifications (a notice when a device connects).

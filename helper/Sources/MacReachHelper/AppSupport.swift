@@ -4,7 +4,11 @@ import UserNotifications
 
 /// Runs the `macreach` command line (the single place that knows how to pause, resume, kick, change config...).
 enum CLI {
-    static var path: String { NSHomeDirectory() + "/.local/bin/macreach" }
+    /// The app's own command-line wrapper when this is the installed app; the ~/.local/bin link in a source checkout.
+    static var path: String {
+        let own = Bundle.main.bundlePath + "/Contents/Resources/macreach-cli"
+        return FileManager.default.isExecutableFile(atPath: own) ? own : NSHomeDirectory() + "/.local/bin/macreach"
+    }
 
     static func run(_ args: [String], completion: ((Int32, String, String) -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -82,6 +86,44 @@ enum MainMenu {
         add("Window", [item("Close", #selector(NSWindow.performClose(_:)), "w"), item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")])
         NSApp.mainMenu = main
     }
+}
+
+/// The downloadable app carries its own Node, Tailscale and server (Contents/Resources/macreach). Launching it from Finder sets up the
+/// background jobs that run those copies; a source checkout does not use any of this.
+enum Bundled {
+    static var isBundled: Bool { FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/macreach/server/src/index.js") }
+    static var version: String { (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev" }
+    /// Disk images mount at /Volumes and Gatekeeper may run a downloaded app from a random AppTranslocation path: jobs written from
+    /// either would point at a place that disappears.
+    static var inTemporaryLocation: Bool { let p = Bundle.main.bundlePath; return p.hasPrefix("/Volumes/") || p.contains("/AppTranslocation/") }
+    /// Quarantine is set on the downloaded file; the background jobs start the app's inner programs with nobody there to approve them.
+    static func clearQuarantine() {
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/xattr"); p.arguments = ["-dr", "com.apple.quarantine", Bundle.main.bundlePath]
+        try? p.run(); p.waitUntilExit()
+    }
+    /// True when the launch agents already point at this copy of the app at this version.
+    static var installed: Bool {
+        let f = NSHomeDirectory() + "/Library/Application Support/MacReach/installed.json"
+        guard let d = FileManager.default.contents(atPath: f), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return false }
+        guard (j["app"] as? String) == Bundle.main.bundlePath && (j["version"] as? String) == version else { return false }
+        // "Quit MacReach" unloads the jobs; opening the app again must bring them back.
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/launchctl"); p.arguments = ["print", "gui/\(getuid())/com.macreach.server"]
+        p.standardOutput = Pipe(); p.standardError = Pipe()
+        guard (try? p.run()) != nil else { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+    /// Runs `macreach install` from this app and waits for it. Returns the tool's error text, or nil on success.
+    static func install() -> String? {
+        let p = Process(); p.executableURL = URL(fileURLWithPath: CLI.path); p.arguments = ["install"]
+        let e = Pipe(); p.standardError = e; p.standardOutput = Pipe()
+        do { try p.run() } catch { return error.localizedDescription }
+        p.waitUntilExit()
+        let text = String(data: e.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return p.terminationStatus == 0 ? nil : (text.isEmpty ? "install failed (exit \(p.terminationStatus))" : text)
+    }
+    /// Removes the background jobs and moves the app to the Trash (the CLI does both, then stops this app last).
+    static func uninstallAndTrash() { CLI.run(["uninstall"]) { _, _, _ in exit(0) } }
 }
 
 enum Alerts {

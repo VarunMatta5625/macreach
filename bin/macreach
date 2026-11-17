@@ -23,12 +23,19 @@ const APP_SUPPORT = path.join(HOME, 'Library', 'Application Support', 'MacReach'
 const RUNTIME = path.join(APP_SUPPORT, 'runtime');
 const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
 const LOGS = path.join(HOME, 'Library', 'Logs', 'MacReach');
-const HELPER_BIN = path.join(HOME, 'Applications', 'MacReach.app', 'Contents', 'MacOS', 'MacReach');
+// Bundled mode: this script lives inside MacReach.app (Contents/Resources/macreach/bin/macreach) and everything it needs ships in the
+// app: its own Node, Tailscale and helper. Source mode (a git checkout) uses Homebrew's binaries and a copy under Application Support.
+const BUNDLE = (root.match(/^(.*\.app)\/Contents\/Resources\/macreach$/) || [])[1] || null;
+const MACOS_DIR = BUNDLE && path.join(BUNDLE, 'Contents', 'MacOS');
+const HELPER_BIN = BUNDLE ? path.join(MACOS_DIR, 'MacReach') : path.join(HOME, 'Applications', 'MacReach.app', 'Contents', 'MacOS', 'MacReach');
+const NODE_BIN = BUNDLE ? path.join(MACOS_DIR, 'node') : process.execPath;
+const VERSION = (() => { try { return fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim(); } catch { return 'dev'; } })();
+const INSTALLED_FILE = path.join(APP_SUPPORT, 'installed.json');   // which app copy and version the launch agents currently point at
 const LABELS = { server: 'com.macreach.server', helper: 'com.macreach.helper', tailscaled: 'com.macreach.tailscaled' };
 const TS_DIR = path.join(APP_SUPPORT, 'tailscale');
 const TS_SOCK = path.join(TS_DIR, 'ts.sock');
-const TS_BIN = ['/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'].find((f) => fs.existsSync(f));
-const TSD_BIN = ['/opt/homebrew/bin/tailscaled', '/usr/local/bin/tailscaled'].find((f) => fs.existsSync(f));
+const TS_BIN = BUNDLE ? path.join(MACOS_DIR, 'tailscale') : ['/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'].find((f) => fs.existsSync(f));
+const TSD_BIN = BUNDLE ? path.join(MACOS_DIR, 'tailscaled') : ['/opt/homebrew/bin/tailscaled', '/usr/local/bin/tailscaled'].find((f) => fs.existsSync(f));
 const ts = (...a) => spawnSync(TS_BIN, ['--socket=' + TS_SOCK, ...a], { encoding: 'utf8', timeout: 20000, input: '' });   // timeout: tailscale can wait forever for a browser step
 const tsJson = (...a) => { const r = ts(...a); try { return JSON.parse(r.stdout); } catch { return null; } };
 const UID = process.getuid();
@@ -73,38 +80,49 @@ const commands = {
   async install() {
     if (process.env.MACREACH_DATA_DIR) die('Refusing to install while MACREACH_DATA_DIR is set (that is a test data dir).');
     if (!fs.existsSync(HELPER_BIN)) die(`Helper app missing: run scripts/build-helper.sh first (${HELPER_BIN}).`);
-    // Run from a copy outside ~/Desktop so launchd/node never needs the Desktop-folder privacy grant.
-    // `root` is the runtime copy itself when invoked through the ~/.local/bin symlink: use the recorded repo path instead.
-    let srcRoot = root;
-    const repoFile = path.join(RUNTIME, '.repo-path');
-    if (root === RUNTIME || root.startsWith(RUNTIME + path.sep)) {
-      try { srcRoot = fs.readFileSync(repoFile, 'utf8').trim(); } catch {}
-      if (!srcRoot || srcRoot === RUNTIME || !fs.existsSync(path.join(srcRoot, 'server', 'src', 'index.js'))) die('Cannot find the source repo. Run install from the repo itself: <repo>/bin/macreach install');
-    }
-    fs.mkdirSync(RUNTIME, { recursive: true, mode: 0o700 }); fs.mkdirSync(LOGS, { recursive: true });
-    fs.writeFileSync(repoFile, srcRoot + '\n', { mode: 0o600 });
-    // Stop the server first (KeepAlive would restart it mid-copy and it would load half a tree), then copy into a staging
-    // directory and swap each folder in with a rename.
-    launchctl('bootout', `gui/${UID}/${LABELS.server}`);
-    for (let t = 0; t < 20 && launchctl('print', `gui/${UID}/${LABELS.server}`).status === 0; t++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-    const stage = path.join(RUNTIME, '.stage'); fs.rmSync(stage, { recursive: true, force: true }); fs.mkdirSync(stage);
-    const keep = (f) => !/[\\/](test|\.DS_Store)$/.test(f);
-    fs.cpSync(path.join(srcRoot, 'bin'), path.join(stage, 'bin'), { recursive: true });
-    fs.cpSync(path.join(srcRoot, 'server'), path.join(stage, 'server'), { recursive: true, filter: keep });
-    fs.cpSync(path.join(srcRoot, 'web'), path.join(stage, 'web'), { recursive: true, filter: keep });
-    for (const d of ['bin', 'server', 'web']) { fs.rmSync(path.join(RUNTIME, d), { recursive: true, force: true }); fs.renameSync(path.join(stage, d), path.join(RUNTIME, d)); }
-    fs.rmSync(stage, { recursive: true, force: true });
-    fs.chmodSync(path.join(RUNTIME, 'bin', 'macreach'), 0o755);
+    fs.mkdirSync(LOGS, { recursive: true });
+    let serverRoot, link;
     const bin = path.join(HOME, '.local', 'bin'); fs.mkdirSync(bin, { recursive: true });
-    const link = path.join(bin, 'macreach'); try { fs.unlinkSync(link); } catch {}
-    fs.symlinkSync(path.join(RUNTIME, 'bin', 'macreach'), link);
+    link = path.join(bin, 'macreach'); try { fs.unlinkSync(link); } catch {}
+    if (BUNDLE) {
+      // Run straight from the app: nothing to copy, and replacing the app is the update.
+      serverRoot = root;
+      fs.writeFileSync(link, `#!/bin/sh\nexec "${path.join(BUNDLE, 'Contents', 'Resources', 'macreach-cli')}" "$@"\n`, { mode: 0o755 });
+    } else {
+      // Run from a copy outside ~/Desktop so launchd/node never needs the Desktop-folder privacy grant.
+      // `root` is the runtime copy itself when invoked through the ~/.local/bin symlink: use the recorded repo path instead.
+      let srcRoot = root;
+      const repoFile = path.join(RUNTIME, '.repo-path');
+      if (root === RUNTIME || root.startsWith(RUNTIME + path.sep)) {
+        try { srcRoot = fs.readFileSync(repoFile, 'utf8').trim(); } catch {}
+        if (!srcRoot || srcRoot === RUNTIME || !fs.existsSync(path.join(srcRoot, 'server', 'src', 'index.js'))) die('Cannot find the source repo. Run install from the repo itself: <repo>/bin/macreach install');
+      }
+      fs.mkdirSync(RUNTIME, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(repoFile, srcRoot + '\n', { mode: 0o600 });
+      // Stop the server first (KeepAlive would restart it mid-copy and it would load half a tree), then copy into a staging
+      // directory and swap each folder in with a rename.
+      launchctl('bootout', `gui/${UID}/${LABELS.server}`);
+      for (let t = 0; t < 20 && launchctl('print', `gui/${UID}/${LABELS.server}`).status === 0; t++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+      const stage = path.join(RUNTIME, '.stage'); fs.rmSync(stage, { recursive: true, force: true }); fs.mkdirSync(stage);
+      const keep = (f) => !/[\\/](test|\.DS_Store)$/.test(f);
+      fs.cpSync(path.join(srcRoot, 'bin'), path.join(stage, 'bin'), { recursive: true });
+      fs.cpSync(path.join(srcRoot, 'server'), path.join(stage, 'server'), { recursive: true, filter: keep });
+      fs.cpSync(path.join(srcRoot, 'web'), path.join(stage, 'web'), { recursive: true, filter: keep });
+      for (const d of ['bin', 'server', 'web']) { fs.rmSync(path.join(RUNTIME, d), { recursive: true, force: true }); fs.renameSync(path.join(stage, d), path.join(RUNTIME, d)); }
+      fs.rmSync(stage, { recursive: true, force: true });
+      fs.chmodSync(path.join(RUNTIME, 'bin', 'macreach'), 0o755);
+      fs.symlinkSync(path.join(RUNTIME, 'bin', 'macreach'), link);
+      serverRoot = RUNTIME;
+    }
     fs.mkdirSync(AGENTS, { recursive: true });
-    const env = `  <key>EnvironmentVariables</key><dict><key>PATH</key><string>${path.dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>\n`;
-    fs.writeFileSync(path.join(AGENTS, LABELS.server + '.plist'), plist(LABELS.server, [process.execPath, path.join(RUNTIME, 'server', 'src', 'index.js')], `  <key>WorkingDirectory</key><string>${xml(RUNTIME)}</string>\n${env}`));
-    fs.writeFileSync(path.join(AGENTS, LABELS.helper + '.plist'), plist(LABELS.helper, [HELPER_BIN], `  <key>ProcessType</key><string>Interactive</string>\n  <key>AssociatedBundleIdentifiers</key><string>com.macreach.helper</string>\n${env}`));
+    const env = `  <key>EnvironmentVariables</key><dict><key>PATH</key><string>${path.dirname(NODE_BIN)}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>\n`;
+    // Every job names the app as its owner so System Settings > Login Items shows "MacReach", not bare "node" and "tailscaled".
+    const owner = `  <key>AssociatedBundleIdentifiers</key><string>com.macreach.helper</string>\n`;
+    fs.writeFileSync(path.join(AGENTS, LABELS.server + '.plist'), plist(LABELS.server, [NODE_BIN, path.join(serverRoot, 'server', 'src', 'index.js')], `  <key>WorkingDirectory</key><string>${xml(serverRoot)}</string>\n${owner}${env}`));
+    fs.writeFileSync(path.join(AGENTS, LABELS.helper + '.plist'), plist(LABELS.helper, [HELPER_BIN], `  <key>ProcessType</key><string>Interactive</string>\n${owner}${env}`));
     if (TSD_BIN) {
       fs.mkdirSync(TS_DIR, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(path.join(AGENTS, LABELS.tailscaled + '.plist'), plist(LABELS.tailscaled, [TSD_BIN, '--tun=userspace-networking', '--socket=' + TS_SOCK, '--statedir=' + path.join(TS_DIR, 'state'), '--port=0']));
+      fs.writeFileSync(path.join(AGENTS, LABELS.tailscaled + '.plist'), plist(LABELS.tailscaled, [TSD_BIN, '--tun=userspace-networking', '--socket=' + TS_SOCK, '--statedir=' + path.join(TS_DIR, 'state'), '--port=0'], owner));
     }
     for (const l of Object.values(LABELS)) {
       if (l === LABELS.tailscaled && !TSD_BIN) continue;
@@ -118,6 +136,8 @@ const commands = {
       }
       if (r.status !== 0) die(`launchctl bootstrap ${l} failed: ${r.stderr.trim()}`);
     }
+    fs.mkdirSync(APP_SUPPORT, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(INSTALLED_FILE, JSON.stringify({ version: VERSION, app: BUNDLE || '', at: new Date().toISOString() }) + '\n', { mode: 0o600 });
     out('Installed. Server, helper and Tailscale daemon now start at login and restart if they exit.\nCLI: ' + link + '\nLogs: ' + LOGS);
   },
 
@@ -126,14 +146,21 @@ const commands = {
     const purge = flag === '--purge';
     if (purge && prompt('This deletes your MacReach password, settings, audit log and Tailscale login on this Mac. Type "delete" to continue: ').trim() !== 'delete') die('Cancelled. Nothing changed.');
     if (TS_BIN && fs.existsSync(TS_SOCK)) { ts('serve', 'reset'); }   // never leave a public/private route pointing at nothing
-    for (const l of Object.values(LABELS)) { launchctl('bootout', `gui/${UID}/${l}`); try { fs.unlinkSync(path.join(AGENTS, l + '.plist')); } catch {} }
-    fs.rmSync(path.join(HOME, 'Applications', 'MacReach.app'), { recursive: true, force: true });
+    // The app's own menu runs this command, and booting out the helper kills it (and its children): do that last.
+    const order = [LABELS.server, LABELS.tailscaled, LABELS.helper];
+    for (const l of order.slice(0, 2)) { launchctl('bootout', `gui/${UID}/${l}`); try { fs.unlinkSync(path.join(AGENTS, l + '.plist')); } catch {} }
     try { fs.unlinkSync(path.join(HOME, '.local', 'bin', 'macreach')); } catch {}
+    try { fs.unlinkSync(INSTALLED_FILE); } catch {}
+    if (BUNDLE) {   // moving a running app is fine; it vanishes from Applications and sits in the Trash
+      try { const t = path.join(HOME, '.Trash', 'MacReach.app'); fs.rmSync(t, { recursive: true, force: true }); fs.renameSync(BUNDLE, t); out('MacReach moved to the Trash.'); }
+      catch (e) { out('Could not move ' + BUNDLE + ' to the Trash (' + e.message + '). Drag it there yourself.'); }
+    } else fs.rmSync(path.join(HOME, 'Applications', 'MacReach.app'), { recursive: true, force: true });
     spawnSync('defaults', ['delete', 'com.macreach.helper'], { stdio: 'ignore' });
     fs.rmSync(RUNTIME, { recursive: true, force: true });
     if (purge) { fs.rmSync(APP_SUPPORT, { recursive: true, force: true }); fs.rmSync(LOGS, { recursive: true, force: true }); }
     out(purge ? 'MacReach removed, including all its data.' : 'MacReach removed. Your password, settings and Tailscale login are kept in ' + APP_SUPPORT + ' (delete them with: macreach uninstall --purge, or by hand).');
     out('macOS keeps the Screen Recording / Accessibility entries: remove MacReach from System Settings > Privacy & Security if you want them gone. Also remove this Mac from login.tailscale.com/admin/machines.');
+    launchctl('bootout', `gui/${UID}/${LABELS.helper}`); try { fs.unlinkSync(path.join(AGENTS, LABELS.helper + '.plist')); } catch {}   // last: this stops the menu bar app
   },
 
   // ---- remote access: Tailscale Serve (private) / Funnel (public) / pause / kill ----
@@ -297,7 +324,7 @@ const commands = {
       serverUp: st.ok, port: st.json?.port || cfg.port, paused: !!cfg.paused, passwordSet: !!auth?.hash, username: auth?.username || '', totp: !!(cfg.totp.enabled && auth?.totp?.secret),
       tailscale: ts_, privateUrl: ts_.serving && ts_.dns ? `https://${ts_.dns}/` : '', publicUrl: ts_.funnel && ts_.dns ? `https://${ts_.dns}/` : '', localUrl: `http://localhost:${st.json?.port || cfg.port}/`,
       config: { allowTakeover: !!cfg.security.allowTakeover, clipboardSync: !!cfg.clipboard.sync, idleMinutes: cfg.session.idleMinutes, absoluteHours: cfg.session.absoluteHours },
-      agents, version: '1.0',
+      agents, version: VERSION,
     }));
   },
 

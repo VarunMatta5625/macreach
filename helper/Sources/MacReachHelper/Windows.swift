@@ -61,7 +61,7 @@ final class Checklist {
         else if ts["httpsCerts"] as? Bool == true { dnsRow.set(ok: true, detail: "On.", button: nil) }
         else { dnsRow.set(ok: false, detail: "Turn both on once for your Tailscale account: MagicDNS and HTTPS Certificates.", button: "Open admin page") }
         if !running { keyRow.set(ok: nil, detail: "Needs Tailscale first.", button: nil) }
-        else if let d = ts["keyExpiryDays"] as? Int { keyRow.set(ok: d > 30 ? nil : false, detail: "Tailscale signs this Mac out in \(d) days, which breaks the link. In the admin page choose this machine's menu > Disable key expiry.", button: "Open admin page") }
+        else if let d = ts["keyExpiryDays"] as? Int { keyRow.set(ok: false, detail: "Key expiry is on: Tailscale signs this Mac out in \(d) days and the link stops working. Fix it once: open the admin page, click the ⋯ menu next to this Mac, choose Disable key expiry.", button: "Open admin page") }
         else { keyRow.set(ok: true, detail: "Key expiry is off: the link stays valid.", button: nil) }
         urlRow.set(ok: s.privateUrl.isEmpty ? nil : true, detail: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Not set up yet." : "Needs Tailscale first.") : s.privateUrl, button: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Set up" : nil) : "Copy")
         urlRow.setAction { if !s.privateUrl.isEmpty { copyToPasteboard(s.privateUrl) } else { AppActions.enablePrivateUrl() } }
@@ -101,6 +101,9 @@ enum AppActions {
         }
     }
     static func funnelOff() { CLI.run(["access", "funnel", "off"]) { _, _, _ in AppState.shared.refresh() } }
+    static func uninstall() {
+        if Alerts.confirm("Uninstall MacReach?", "Remote access stops and MacReach moves to the Trash. Your password, settings and Tailscale sign-in stay in ~/Library/Application Support/MacReach, so a later reinstall picks up where you left off. To remove them too, run \"macreach uninstall --purge\" first.", ok: "Uninstall") { Bundled.uninstallAndTrash() }
+    }
     static func stopUntilLogin() {
         if Alerts.confirm("Quit MacReach?", "Any remote session ends and remote access stops. MacReach starts again at your next login, or when you run \"macreach install\".", ok: "Quit") { CLI.run(["stop"]) { _, _, _ in } }
     }

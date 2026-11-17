@@ -5,6 +5,7 @@
 - Setup assistant and Settings show Tailscale sign-in, MagicDNS/HTTPS certificates, private link and key-expiry state, and can be reopened any time from the menu.
 - "Add phone or tablet" window: app-store links, QR code of the private link, tailnet device list.
 - `macreach://settings|setup|add-device` deep links; single running instance.
+- Disk image: `scripts/make-dmg.sh` builds `dist/MacReach-<version>-arm64.dmg`, a self-contained app (helper, server, web client, Node 24 and Tailscale inside, about 54 MB download, 157 MB installed). Opening the app from Finder sets up the three background jobs from the app itself, refuses to do so from a disk image or a translocated path, clears quarantine on itself, and re-runs on an update or a move. New: menu "Uninstall MacReach…", `installed.json` bookkeeping, `VERSION`, license notices in the app. The Setup row for Tailscale key expiry is now a warning whenever expiry is on.
 - Web: toolbar button for Mission Control (same action as the Mission Ctrl chip in the shortcut bar).
 - Web: on a slow path (smoothed round trip over 120 ms) the browser shows its own pointer over the screen so it moves instantly, instead of waiting for the Mac's cursor to come back in the video.
 - Fixed: the device list in Add a phone or tablet showed dozens of Funnel relay peers (funnel-ingress-node); only your own devices are listed now.

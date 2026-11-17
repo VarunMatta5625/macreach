@@ -13,7 +13,21 @@ A small native menu bar app captures the screen and injects mouse, keyboard and 
 - **Guided setup, repeatable:** a Setup assistant (re-openable from the menu) covers permissions, password and Tailscale; "Add phone or tablet" shows a QR code for the private link.
 - **Easy install:** `./install.sh` on a new Mac, then a setup assistant asks for every macOS permission in one place.
 
-## Requirements
+## Install from the disk image (no developer tools)
+
+Download `MacReach-<version>-arm64.dmg` from the GitHub release, open it and drag MacReach into Applications. It carries its own Node.js and Tailscale, so nothing else needs installing. Apple Silicon Macs on macOS 14 or newer only.
+
+MacReach is not notarized (that needs a paid Apple developer account), so macOS blocks the first launch:
+
+1. Open MacReach from Applications. macOS says it cannot verify the app.
+2. Open **System Settings > Privacy & Security**, scroll to the MacReach message and click **Open Anyway**, then confirm with your password or Touch ID.
+3. Open MacReach again. Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/MacReach.app`.
+
+Then follow the Setup assistant in the menu bar app: macOS permissions, your password, and Tailscale. **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry), otherwise Tailscale signs it out after 180 days and your link stops working. To update, download the new image, drag the app over the old one and open it once. To remove: menu bar icon > Uninstall MacReach.
+
+Build the image yourself with `scripts/make-dmg.sh` (needs Swift 6 and `brew install --formula tailscale` on the build Mac).
+
+## Requirements (building from source)
 
 - macOS 14 or newer (Apple Silicon or Intel)
 - Xcode Command Line Tools with Swift 6, Node.js 20+

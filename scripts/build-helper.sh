@@ -2,7 +2,8 @@
 # Builds helper and assembles + signs ~/Applications/MacReach.app (stable path + stable signature => stable TCC grants)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$HOME/Applications/MacReach.app"
+APP="${APP_OUT:-$HOME/Applications/MacReach.app}"   # APP_OUT: scripts/make-dmg.sh builds somewhere else and signs last
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION" 2>/dev/null || echo dev)"
 D="$HOME/Library/Application Support/MacReach/signing"
 "$ROOT/scripts/setup-signing.sh" >/dev/null
 security unlock-keychain -p "$(cat "$D/kc.pw")" "$D/macreach-signing.keychain-db"
@@ -25,7 +26,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>CFBundleExecutable</key><string>MacReach</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSUIElement</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.macreach.helper</string><key>CFBundleURLSchemes</key><array><string>macreach</string></array></dict></array>
@@ -34,6 +35,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>NSScreenCaptureUsageDescription</key><string>MacReach streams your screen to your own authenticated browser sessions.</string>
 </dict></plist>
 PL
+[ -n "${NO_SIGN:-}" ] && { echo "built $APP (unsigned)"; exit 0; }
 codesign --force --keychain "$D/macreach-signing.keychain-db" -s "$(cat "$D/identity.txt")" -i com.macreach.helper "$APP"
 codesign -dr - "$APP" 2>&1 | grep designated
 echo "built $APP"

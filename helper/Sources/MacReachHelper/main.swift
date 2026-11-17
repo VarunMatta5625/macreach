@@ -63,6 +63,18 @@ var currentCfg = StreamConfig()
 // Menu bar item, setup assistant and settings only in the real, installed instance: a test helper (--test-pattern or a custom
 // --socket) must never add a second icon to the user's menu bar.
 let uiEnabled = !testMode && arg("--socket") == nil
+// Downloaded app, opened from Finder: set up the background jobs from this copy (first run, a new location or an update), then hand over
+// to the copy launchd starts. An instance launchd started itself, or a copy already installed, skips this.
+if uiEnabled, Bundled.isBundled, ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != "com.macreach.helper", !Bundled.installed {
+    func fail(_ title: String, _ text: String) -> Never {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert(); a.alertStyle = .warning; a.messageText = title; a.informativeText = text; a.runModal(); exit(1)
+    }
+    if Bundled.inTemporaryLocation { fail("Move MacReach to Applications first", "Drag MacReach into your Applications folder, eject the disk image, then open MacReach from Applications.") }
+    Bundled.clearQuarantine()
+    if let err = Bundled.install() { fail("MacReach could not start its background services", err) }
+    exit(0)   // launchd has started the installed copy; it shows the setup assistant
+}
 if uiEnabled, let me = Bundle.main.bundleIdentifier {
     // One instance only. A copy started by hand (Finder, Spotlight) hands over to the running one; an instance started by launchd replaces a stale one.
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: me).filter { $0.processIdentifier != getpid() }
