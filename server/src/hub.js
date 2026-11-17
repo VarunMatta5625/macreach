@@ -21,6 +21,7 @@ export class Hub {
     this.timer = setInterval(() => this._tick(), 500);
     this.timer.unref?.();
     this._seqGen = 0; this._pend = null;
+    this._levels = new Map();   // session id hash -> { level, t }: last quality level a session settled at
   }
 
   /** Tell the Mac-side helper who is in control, so the menu bar icon can show it. Safe to call any time. */
@@ -78,6 +79,7 @@ export class Hub {
       this.helper.send({ c: 'clipwatch', on: false });
       this.helper.send({ c: 'stop' });
     }
+    if (c.q?.auto && c.attached) this._levels.set(c.session.idHash, { level: c.q.level, t: Date.now() });
     c.attached = false; c.active = false;
     audit({ event: 'control-end', ip: c.ip });
     this.pushSession();
@@ -193,7 +195,10 @@ export class Hub {
     c.displayId = Number.isInteger(m.display) ? m.display : undefined;
     const auto = m.mode !== 'fixed';
     const maxLevel = Math.min(v.maxLevel, Number.isInteger(m.maxLevel) ? m.maxLevel : v.maxLevel, LADDER.length - 1);
-    c.q = new QualityController({ minLevel: 0, maxLevel, level: Math.min(maxLevel, Number.isInteger(m.level) ? m.level : v.defaultLevel), auto, jpeg });
+    // A refresh or reconnect resumes at the level this session had earned instead of starting high, falling to saver, and climbing again.
+    const mem = this._levels.get(c.session.idHash);
+    const start = Number.isInteger(m.level) ? m.level : (mem && Date.now() - mem.t < 10 * 60_000 ? mem.level : v.defaultLevel);
+    c.q = new QualityController({ minLevel: 0, maxLevel, level: Math.min(maxLevel, start), auto, jpeg });
     c.attached = true;
     this._startHelper(c);
     this._send(c, { t: 'attached', codec: jpeg ? 'jpeg' : 'h264', params: c.q.params(), ladder: LADDER });

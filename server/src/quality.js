@@ -11,7 +11,7 @@ export const LADDER = [
   { name: 'native',  maxW: 0,    maxH: 0,    fps: 60, bitrate: 16_000_000 },
 ];
 
-const MIN_INFLIGHT_FRAMES = 4, MAX_INFLIGHT_FRAMES = 12;
+const MIN_INFLIGHT_FRAMES = 4, MAX_INFLIGHT_FRAMES = 20;   // 20: a 400 ms relay path at 30 fps legitimately has ~12 frames in flight
 
 export class QualityController {
   constructor({ minLevel = 0, maxLevel = LADDER.length - 1, level = 3, auto = true, jpeg = false } = {}) {
@@ -108,7 +108,10 @@ export class QualityController {
     // Climb when the stream is using its budget (proof the link carries it), or, on a mostly static screen where that
     // proof never comes, after a longer calm spell. A static screen would otherwise stay at 'saver' (blurry) forever.
     const proven = quiet(this.climbWait) && sentRate > target * 0.5;
-    const idleClimb = quiet(Math.max(15000, this.climbWait)) && this.rtt > 0 && sentRate <= target * 0.5;
+    // The two lowest rungs are cheap and where a laggy path (Funnel, ~400 ms) spends its time: probe them sooner. A punished climb
+    // still doubles climbWait, so a link that really cannot carry the next rung backs off exponentially.
+    const idleWait = Math.max(this.level <= 1 ? 8000 : 15000, this.climbWait);
+    const idleClimb = quiet(idleWait) && this.rtt > 0 && sentRate <= target * 0.5;
     if (this.level < this.maxLevel && (proven || idleClimb)) {
       this.level++; this.lastChange = now; this.lastUp = now;
       return this.params();

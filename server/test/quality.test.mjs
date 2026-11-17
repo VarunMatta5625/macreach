@@ -37,3 +37,20 @@ test('a 150 ms path at 30 fps is allowed more frames in flight than a LAN', () =
   assert.ok(wan._maxInflight() > lan._maxInflight());
   assert.ok(wan._maxInflight() <= 12);
 });
+
+test('laggy relay path (400 ms) with periodic bursts still climbs out of saver', () => {
+  const q = new QualityController({ level: 0, maxLevel: 5, auto: true }); q.lastChange = 0;
+  q.rttMin = 400; q.rtt = 400;
+  let t = 1000, seq = 0, climbedAt = null;
+  for (; t <= 60000 && climbedAt === null; t += 500) {
+    q.onSent(++seq, 3000, t); q.onAck(seq, t + 400);              // a trickle of small frames, acked at 400 ms
+    if (t % 12000 === 0) { for (let i = 0; i < 25; i++) q.onSent(++seq, 4000, t); q.gate(false, 1000, t); q.gate(true, 1000, t + 10); q.gate(false, 1000, t + 20); }   // a screen change every 12 s overruns the cap
+    if (q.tick(t)) climbedAt = t;
+  }
+  assert.ok(climbedAt !== null && climbedAt <= 30000, 'climbed by ' + climbedAt);
+});
+
+test('the in-flight cap on a 400 ms path leaves room for a burst', () => {
+  const q = new QualityController({ level: 2, auto: true }); q.rttMin = 400;
+  assert.ok(q._maxInflight() >= 16);
+});
