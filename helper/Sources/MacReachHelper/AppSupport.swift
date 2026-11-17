@@ -133,6 +133,17 @@ enum Alerts {
             let a = NSAlert(); a.alertStyle = .warning; a.messageText = title; a.informativeText = text.trimmingCharacters(in: .whitespacesAndNewlines); a.runModal()
         }
     }
+    /// Funnel refused: if the text carries a Tailscale approval link, offer to open it.
+    static func funnelFailed(_ text: String) {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            let a = NSAlert(); a.alertStyle = .warning; a.messageText = "Funnel not turned on"
+            a.informativeText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let link = text.range(of: "https://login\\.tailscale\\.com/[^\\s]+", options: .regularExpression).map { String(text[$0]) }
+            if link != nil { a.addButton(withTitle: "Open Tailscale"); a.addButton(withTitle: "Cancel") }
+            if a.runModal() == .alertFirstButtonReturn, let l = link { Panes.openURL(l) }
+        }
+    }
     static func confirm(_ title: String, _ text: String, ok: String) -> Bool {
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert(); a.messageText = title; a.informativeText = text

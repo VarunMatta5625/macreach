@@ -212,7 +212,10 @@ const commands = {
       const port = (await ctl('GET', '/_ctl/status')).json?.port || cfg.port;
       const r = ts('funnel', '--bg', '--https=443', `http://127.0.0.1:${port}`);
       out((r.stdout + r.stderr).trim());
-      if (r.status !== 0) die('tailscale funnel failed.');
+      if (r.status !== 0) {
+        const link = /https:\/\/login\.tailscale\.com\/\S+/.exec(r.stdout + r.stderr)?.[0];   // Funnel not yet allowed for this tailnet: Tailscale prints an approval link and waits
+        die(link ? `Funnel is not allowed on your Tailscale account yet. Open this link, approve it, then turn public access on again:\n${link}` : 'tailscale funnel failed.');
+      }
       saveConfigPatch({ hosts: [...new Set([...(cfg.hosts || []), i.dns])], security: { forceSecureCookies: true } });
       await reload(); audit({ event: 'access-funnel-on', host: i.dns, via: 'cli' });
       return out(`\nPublic URL: https://${i.dns}/`);

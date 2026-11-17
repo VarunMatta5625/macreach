@@ -42,7 +42,8 @@ final class Checklist {
     let dnsRow = RowView(title: "MagicDNS and HTTPS certificates") { Panes.openURL("https://login.tailscale.com/admin/dns") }
     let urlRow = RowView(title: "Private link") { AppActions.enablePrivateUrl() }
     let keyRow = RowView(title: "Keep the link permanent (key expiry)") { Panes.openURL("https://login.tailscale.com/admin/machines") }
-    var all: [RowView] { [screenRow, axRow, notifRow, pwRow, tsRow, dnsRow, urlRow, keyRow] }
+    let funnelRow = RowView(title: "Public access (Funnel)") { AppActions.funnelOn() }
+    var all: [RowView] { [screenRow, axRow, notifRow, pwRow, tsRow, dnsRow, urlRow, keyRow, funnelRow] }
 
     func update() {
         let s = AppState.shared
@@ -65,6 +66,10 @@ final class Checklist {
         else { keyRow.set(ok: true, detail: "Key expiry is off: the link stays valid.", button: nil) }
         urlRow.set(ok: s.privateUrl.isEmpty ? nil : true, detail: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Not set up yet." : "Needs Tailscale first.") : s.privateUrl, button: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Set up" : nil) : "Copy")
         urlRow.setAction { if !s.privateUrl.isEmpty { copyToPasteboard(s.privateUrl) } else { AppActions.enablePrivateUrl() } }
+        if !s.publicUrl.isEmpty { funnelRow.set(ok: true, detail: "ON at \(s.publicUrl). Anyone can open the sign-in page; they still need your password.", button: "Turn off") }
+        else if s.privateUrl.isEmpty { funnelRow.set(ok: nil, detail: "Optional. Needs the private link first.", button: nil) }
+        else { funnelRow.set(ok: nil, detail: "Optional, off by default. Reach this Mac from any browser, without Tailscale on that device. Your tailnet must allow Funnel: if it does not, the next step shows a Tailscale link to approve it.", button: "Turn on…") }
+        funnelRow.setAction { AppState.shared.publicUrl.isEmpty ? AppActions.funnelOn() : AppActions.funnelOff() }
     }
 }
 
@@ -97,7 +102,7 @@ enum AppActions {
     }
     static func funnelOn() {
         if Alerts.typedConfirm("Make MacReach public?", "Anyone on the internet will be able to reach your sign-in page at \(AppState.shared.privateUrl). They still need your password.", phrase: "go public") {
-            CLI.run(["access", "funnel", "--confirm", "go public"]) { code, out, err in AppState.shared.refresh(); if code != 0 { Alerts.error("Funnel not turned on", err.isEmpty ? out : err) } }
+            CLI.run(["access", "funnel", "--confirm", "go public"]) { code, out, err in AppState.shared.refresh(); if code != 0 { Alerts.funnelFailed(err.isEmpty ? out : err) } }
         }
     }
     static func funnelOff() { CLI.run(["access", "funnel", "off"]) { _, _, _ in AppState.shared.refresh() } }
@@ -126,7 +131,7 @@ final class SetupWindow: NSObject, NSWindowDelegate {
     }
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 520), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 600), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init()
         window.title = "MacReach Setup"; window.isReleasedWhenClosed = false; window.delegate = self
         let head = label("Set up MacReach", size: 20, bold: true)

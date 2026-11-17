@@ -23,7 +23,7 @@ MacReach is not notarized (that needs a paid Apple developer account), so macOS 
 2. Open **System Settings > Privacy & Security**, scroll to the MacReach message and click **Open Anyway**, then confirm with your password or Touch ID.
 3. Open MacReach again. Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/MacReach.app`.
 
-Then follow the Setup assistant in the menu bar app: macOS permissions, your password, and Tailscale. **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry), otherwise Tailscale signs it out after 180 days and your link stops working. To update, download the new image, drag the app over the old one and open it once. To remove: menu bar icon > Uninstall MacReach.
+Then follow the Setup assistant in the menu bar app: macOS permissions, your password, and Tailscale. **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry), otherwise Tailscale signs it out after 180 days and your link stops working. Public access (Funnel) is optional and off by default: use **Turn on…** in Setup or Settings; if your Tailscale account has not allowed Funnel yet, the app shows a link to approve it. To update, download the new image, drag the app over the old one and open it once. To remove: menu bar icon > Uninstall MacReach.
 
 **Apple Silicon only** (Intel Macs can build from source below). With the macOS firewall on, the first start may ask whether `tailscaled` may accept incoming connections: click Allow. If you click Deny, Tailscale still works through its relay servers, only slower.
 

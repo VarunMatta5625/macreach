@@ -13,6 +13,9 @@ MacReach: first run
    your password, and Tailscale (the free service that lets your phone or tablet reach this Mac).
 5. In Tailscale's admin page, turn OFF key expiry for this Mac. Otherwise Tailscale signs it out after 180 days and your link stops
    working until you sign in again. Setup shows the exact steps.
+6. Optional: public access (Funnel). Setup and Settings have a "Turn on..." button for it. It lets any browser reach your sign-in page
+   without Tailscale on that device. The first time, Tailscale may ask you to approve Funnel for your account: the app shows a link, open it,
+   approve, then press Turn on again. Funnel stays off until you turn it on.
 
 If the Mac's firewall is on, macOS may ask whether "tailscaled" can accept incoming connections: click Allow. (If you click Deny, Tailscale still works through its relay servers, only slower.)
 
