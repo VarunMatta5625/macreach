@@ -46,6 +46,23 @@ enum CLI {
     }
 }
 
+/// MacReach lives in the menu bar (no Dock icon) until one of its windows is open; then it behaves like a normal app, with a Dock icon,
+/// and goes back to menu-bar-only when the last window closes.
+enum Dock {
+    private static var observing = false
+    static func willShow() {
+        NSApp.setActivationPolicy(.regular)
+        guard !observing else { return }
+        observing = true
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in
+            DispatchQueue.main.async {   // the closing window is still visible while the notification runs
+                let open = NSApp.windows.contains { $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel) }
+                if !open { NSApp.setActivationPolicy(.accessory) }
+            }
+        }
+    }
+}
+
 enum Alerts {
     static func error(_ title: String, _ text: String) {
         DispatchQueue.main.async {

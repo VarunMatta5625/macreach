@@ -54,7 +54,7 @@ final class AddDeviceWindow: NSObject, NSWindowDelegate {
 
     private func present() {
         AppState.shared.start(); update()
-        fit(window); placeOnMenuBarScreen(window); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        fit(window); placeOnMenuBarScreen(window); Dock.willShow(); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
     }
 
     private func update() {
