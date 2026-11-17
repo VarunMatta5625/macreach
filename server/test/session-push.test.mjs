@@ -32,3 +32,17 @@ test('deviceName', () => {
   assert.equal(deviceName('Mozilla/5.0 (Macintosh) Chrome/120 Safari/537'), 'Mac Chrome');
   assert.equal(deviceName(''), 'Device browser');
 });
+
+test('liveness: a client that is slow to answer a ping (Funnel RTT + queued video) is not dropped; a silent one is', () => {
+  const { hub } = fakeHub();
+  hub.sessions = { map: new Map([['h', {}]]), expired: () => false };
+  const calls = { terminate: 0, ping: 0 };
+  const ws = { lastSeen: Date.now() - 10_000, terminate: () => calls.terminate++, ping: () => calls.ping++, close() {} };
+  hub.active = { ws, session: { idHash: 'h' }, ip: '1.2.3.4', ua: '', attached: false };
+  hub._tick();
+  assert.equal(calls.terminate, 0, '10 s of silence must not terminate');
+  assert.equal(calls.ping, 1);
+  ws.lastSeen = Date.now() - 30_000;
+  hub._tick();
+  assert.equal(calls.terminate, 1, '30 s of silence terminates');
+});

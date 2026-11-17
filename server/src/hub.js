@@ -3,6 +3,7 @@ import { audit } from './audit.js';
 import { deviceName } from './util.js';
 
 const CMDS = new Set(['missionControl', 'launchpad', 'displaySleep']);
+const LIVENESS_MS = 25_000;
 const KEY_RE = /^[A-Za-z0-9]{1,20}$/;
 const num = (v, lo, hi, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const FORWARD_FROM_HELPER = new Set(['videoConfig', 'status', 'display', 'streamState', 'streamError', 'clip']);
@@ -40,11 +41,11 @@ export class Hub {
   handleConnection(ws, session, ip, ua, selfView = false) {
     const c = { selfView, allowSelf: false, ws, session, ip, ua: String(ua || '').slice(0, 160), active: false, attached: false, pending: false, since: Date.now(), q: null, msgCount: 0, msgWindow: Date.now(), clipSync: false, codecs: ['jpeg'] };
     this.clients.add(c);
-    ws.on('message', (data, isBinary) => { if (!isBinary) this._onMessage(c, data); });
+    ws.on('message', (data, isBinary) => { ws.lastSeen = Date.now(); if (!isBinary) this._onMessage(c, data); });
     ws.on('close', () => this._onClose(c));
     ws.on('error', () => {});
-    ws.isAlive = true;
-    ws.on('pong', () => { ws.isAlive = true; });
+    ws.lastSeen = Date.now();
+    ws.on('pong', () => { ws.lastSeen = Date.now(); });
 
     const cur = this.active;
     if (!cur) return this._activate(c);
@@ -128,8 +129,11 @@ export class Hub {
     if (!c) return;
     // session lifetime (idle/absolute)
     if (!this.sessions.map.has(c.session.idHash) || this.sessions.expired(c.session)) return this._close(c, 4002, { t: 'expired' });
-    if (!c.ws.isAlive) { try { c.ws.terminate(); } catch {} return; }
-    c.ws.isAlive = false; try { c.ws.ping(); } catch {}
+    // Liveness: any frame or pong from the client counts. The deadline must be far longer than a round trip plus the video already
+    // queued ahead of the ping on the same TCP stream (over Funnel that is seconds, not milliseconds).
+    const now = Date.now();
+    if (now - c.ws.lastSeen > LIVENESS_MS) { try { c.ws.terminate(); } catch {} return; }
+    if (now - (c.ws.lastPing || 0) > 5000) { c.ws.lastPing = now; try { c.ws.ping(); } catch {} }
     if (c.attached && c.q) {
       const p = c.q.tick();
       if (p) { this.helper.send({ c: 'quality', ...p }); }
