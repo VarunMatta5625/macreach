@@ -13,6 +13,8 @@ Without the menu bar: `macreach grant`, then `macreach restart`.
 
 Check: `macreach doctor` shows both permissions as `[ ok ]`.
 
+**Redo or review any step later:** menu bar icon > **Setup assistant…**. It shows live ticks for every permission, the password, Tailscale sign-in, MagicDNS/HTTPS certificates, the private link and key expiry, so you can fix whatever is red. The same rows are in **Settings…**. Deep links: `open macreach://setup`, `macreach://settings`, `macreach://add-device`.
+
 ## 2. Set your password (never share it with anyone, including Claude)
 
 ```
@@ -40,6 +42,10 @@ Quick checks: if you have extra monitors connected, a monitor button appears in 
 
 Check: open that URL on your iPad (Tailscale on), sign in.
 Note: this Mac cannot open its own tailnet URL (the Tailscale daemon runs without root, so the Mac has no route to it). Test from another device.
+
+### Adding a phone or tablet
+
+Menu bar icon > **Add phone or tablet…** (also in Settings and at the end of the Setup assistant). It walks you through: install the Tailscale app (App Store / Google Play buttons), sign in with the same account as this Mac, scan the QR code (or copy the link), then sign in with your MacReach username and password. It lists the devices on your tailnet so you can see when the phone has joined. If something is missing (Tailscale sign-in, HTTPS certificates, private link, password) it says what to do first.
 
 ## 5. Public URL (only if you want it; I will not turn this on myself)
 

@@ -10,6 +10,7 @@ A small native menu bar app captures the screen and injects mouse, keyboard and 
 - **Video:** hardware H.264 (ScreenCaptureKit + VideoToolbox, WebCodecs in the browser), JPEG fallback, congestion-based quality ladder, sharp refinement frame when the screen goes still.
 - **Visible on the Mac:** menu bar icon turns red with "In use" while someone is controlling; optional notification when a device connects. Menu: Disconnect, Pause, Sign out all devices, Settings, Setup assistant, Quit.
 - **Security:** Argon2id password (typed only in your own Terminal), sessions with CSRF/CSP/Host/Origin checks, rate limits and lockout, one controller at a time with takeover, audit log, optional TOTP 2FA, pause switch and kill switch. See [SECURITY.md](SECURITY.md).
+- **Guided setup, repeatable:** a Setup assistant (re-openable from the menu) covers permissions, password and Tailscale; "Add phone or tablet" shows a QR code for the private link.
 - **Easy install:** `./install.sh` on a new Mac, then a setup assistant asks for every macOS permission in one place.
 
 ## Requirements

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Setup assistant and Settings show Tailscale sign-in, MagicDNS/HTTPS certificates, private link and key-expiry state, and can be reopened any time from the menu.
+- "Add phone or tablet" window: app-store links, QR code of the private link, tailnet device list.
+- `macreach://settings|setup|add-device` deep links; single running instance.
+- Fixed: pause/kill no longer run `tailscale funnel reset` (it wiped the private link).
+
 ## 1.0.0
 
 First complete release.

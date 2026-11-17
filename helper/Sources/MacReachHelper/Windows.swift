@@ -39,8 +39,10 @@ final class Checklist {
     let notifRow = RowView(title: "Notifications") { AppActions.grantNotifications() }
     let pwRow = RowView(title: "Password") { AppActions.setPassword() }
     let tsRow = RowView(title: "Tailscale (reach this Mac from your other devices)") { AppActions.tailscale() }
+    let dnsRow = RowView(title: "MagicDNS and HTTPS certificates") { Panes.openURL("https://login.tailscale.com/admin/dns") }
     let urlRow = RowView(title: "Private link") { AppActions.enablePrivateUrl() }
-    var all: [RowView] { [screenRow, axRow, notifRow, pwRow, tsRow, urlRow] }
+    let keyRow = RowView(title: "Keep the link permanent (key expiry)") { Panes.openURL("https://login.tailscale.com/admin/machines") }
+    var all: [RowView] { [screenRow, axRow, notifRow, pwRow, tsRow, dnsRow, urlRow, keyRow] }
 
     func update() {
         let s = AppState.shared
@@ -53,6 +55,14 @@ final class Checklist {
         case "NotInstalled": tsRow.set(ok: nil, detail: "Optional. Not installed. Without it MacReach only works on this Mac.", button: "Install…")
         default: tsRow.set(ok: nil, detail: "Optional. Not signed in (\(s.tsState)).", button: "Sign in…")
         }
+        let ts = (s.info["tailscale"] as? [String: Any]) ?? [:]
+        let running = s.tsState == "Running"
+        if !running { dnsRow.set(ok: nil, detail: "Needs Tailscale first.", button: nil) }
+        else if ts["httpsCerts"] as? Bool == true { dnsRow.set(ok: true, detail: "On.", button: nil) }
+        else { dnsRow.set(ok: false, detail: "Turn both on once for your Tailscale account: MagicDNS and HTTPS Certificates.", button: "Open admin page") }
+        if !running { keyRow.set(ok: nil, detail: "Needs Tailscale first.", button: nil) }
+        else if let d = ts["keyExpiryDays"] as? Int { keyRow.set(ok: d > 30 ? nil : false, detail: "Tailscale signs this Mac out in \(d) days, which breaks the link. In the admin page choose this machine's menu > Disable key expiry.", button: "Open admin page") }
+        else { keyRow.set(ok: true, detail: "Key expiry is off: the link stays valid.", button: nil) }
         urlRow.set(ok: s.privateUrl.isEmpty ? nil : true, detail: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Not set up yet." : "Needs Tailscale first.") : s.privateUrl, button: s.privateUrl.isEmpty ? (s.tsState == "Running" ? "Set up" : nil) : "Copy")
         urlRow.setAction { if !s.privateUrl.isEmpty { copyToPasteboard(s.privateUrl) } else { AppActions.enablePrivateUrl() } }
     }
@@ -120,7 +130,8 @@ final class SetupWindow: NSObject, NSWindowDelegate {
         let sub = label("Grant these once and MacReach is ready. Nothing here ever asks for your password in a window; that happens in Terminal.", size: 12, color: .secondaryLabelColor)
         let done = ClosureButton("Done") { [weak self] in self?.window.close() }
         done.keyEquivalent = "\r"
-        let stack = vstack([head, sub] + list.all + [summary, done], spacing: 14)
+        let phone = ClosureButton("Add a phone or tablet…") { AddDeviceWindow.show() }
+        let stack = vstack([head, sub] + list.all + [summary, hstack([done, phone])], spacing: 14)
         stack.edgeInsets = NSEdgeInsets(top: 22, left: 22, bottom: 20, right: 22)
         window.contentView = stack
         stack.widthAnchor.constraint(equalToConstant: 560).isActive = true
@@ -176,8 +187,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         let access = vstack([section("Remote access"), list.urlRow, hstack([publicLabel, funnelBtn]), takeover, clip,
                              hstack([label("Sign out an idle device after", wrap: false), idle, label("minutes", wrap: false)])], spacing: 10)
         let perms = vstack([section("Permissions"), list.screenRow, list.axRow, list.notifRow], spacing: 10)
-        let acct = vstack([section("Account"), list.pwRow, list.tsRow], spacing: 10)
-        let tools = hstack([ClosureButton("Setup assistant…") { SetupWindow.show() }, ClosureButton("Audit log…") { AppActions.showAudit() }, ClosureButton("Open logs folder") { AppActions.openLogs() }])
+        let acct = vstack([section("Account"), list.pwRow, list.tsRow, list.dnsRow, list.keyRow], spacing: 10)
+        let tools = hstack([ClosureButton("Add phone or tablet…") { AddDeviceWindow.show() }, ClosureButton("Setup assistant…") { SetupWindow.show() }, ClosureButton("Audit log…") { AppActions.showAudit() }, ClosureButton("Open logs folder") { AppActions.openLogs() }])
         let stack = vstack([general, access, perms, acct, tools], spacing: 22)
         stack.edgeInsets = NSEdgeInsets(top: 22, left: 22, bottom: 22, right: 22)
         window.contentView = stack

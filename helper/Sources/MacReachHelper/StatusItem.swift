@@ -110,6 +110,7 @@ final class StatusController: NSObject, NSMenuDelegate {
             if !axOK { menu.addItem(ClosureMenuItem("⚠︎ Grant Accessibility…") { AppActions.grantAccessibility() }) }
             menu.addItem(.separator())
         }
+        menu.addItem(ClosureMenuItem("Add phone or tablet…") { AddDeviceWindow.show() })
         menu.addItem(ClosureMenuItem("Settings…") { SettingsWindow.show() })
         menu.addItem(ClosureMenuItem("Setup assistant…") { SetupWindow.show() })
         menu.addItem(.separator())

@@ -63,6 +63,15 @@ var currentCfg = StreamConfig()
 // Menu bar item, setup assistant and settings only in the real, installed instance: a test helper (--test-pattern or a custom
 // --socket) must never add a second icon to the user's menu bar.
 let uiEnabled = !testMode && arg("--socket") == nil
+if uiEnabled, let me = Bundle.main.bundleIdentifier {
+    // One instance only. A copy started by hand (Finder, Spotlight) hands over to the running one; an instance started by launchd replaces a stale one.
+    let others = NSRunningApplication.runningApplications(withBundleIdentifier: me).filter { $0.processIdentifier != getpid() }
+    let byLaunchd = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == "com.macreach.helper"
+    if !others.isEmpty {
+        if byLaunchd { others.forEach { $0.terminate() }; Thread.sleep(forTimeInterval: 1.0) }
+        else { others.first?.activate(options: []); exit(0) }
+    }
+}
 if uiEnabled {
     StatusController.shared = StatusController()
     AppState.shared.refresh()
@@ -73,6 +82,13 @@ if uiEnabled {
 }
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opening MacReach.app again (Finder, Spotlight, `open`) shows Settings: a way in even if the menu bar icon is hidden by the notch.
+    /// macreach://settings, macreach://setup, macreach://add-device open the matching window.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard uiEnabled else { return }
+        for u in urls where u.scheme == "macreach" {
+            switch u.host ?? "" { case "setup": SetupWindow.show(); case "add-device": AddDeviceWindow.show(); default: SettingsWindow.show() }
+        }
+    }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { if uiEnabled { SettingsWindow.show() }; return true }
 }
 let appDelegate = AppDelegate()

@@ -28,6 +28,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSUIElement</key><true/>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.macreach.helper</string><key>CFBundleURLSchemes</key><array><string>macreach</string></array></dict></array>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSUserNotificationsUsageDescription</key><string>MacReach tells you when a remote device starts controlling this Mac.</string>
 <key>NSScreenCaptureUsageDescription</key><string>MacReach streams your screen to your own authenticated browser sessions.</string>

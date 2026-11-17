@@ -283,7 +283,13 @@ const commands = {
     let ts_ = { state: TS_BIN ? 'DaemonDown' : 'NotInstalled', dns: '', serving: false, funnel: false };
     if (TS_BIN) {
       const i = tsJson('status', '--json'); const sv = ts('serve', 'status').stdout;
-      ts_ = { state: i?.BackendState || 'DaemonDown', dns: (i?.Self?.DNSName || '').replace(/\.$/, ''), serving: /127\.0\.0\.1/.test(sv), funnel: /Funnel on/i.test(sv) };
+      const exp = i?.Self?.KeyExpiry ? Date.parse(i.Self.KeyExpiry) : 0;   // absent/zero date = expiry disabled for this machine
+      ts_ = {
+        state: i?.BackendState || 'DaemonDown', dns: (i?.Self?.DNSName || '').replace(/\.$/, ''), serving: /127\.0\.0\.1/.test(sv), funnel: /Funnel on/i.test(sv),
+        magicDns: !!i?.CurrentTailnet?.MagicDNSEnabled, httpsCerts: (i?.CertDomains || []).length > 0,
+        account: i?.User?.[i?.Self?.UserID]?.LoginName || '', keyExpiryDays: exp > Date.parse('2001-01-01') ? Math.round((exp - Date.now()) / 86400000) : null,
+        devices: Object.values(i?.Peer || {}).map((p) => ({ name: (p.HostName || '').slice(0, 40), os: p.OS || '', online: !!p.Online })).slice(0, 30),
+      };
     }
     const agents = {}; for (const [k, l] of Object.entries(LABELS)) agents[k] = { loaded: launchctl('print', `gui/${UID}/${l}`).status === 0, enabled: !/disabled/.test(launchctl('print-disabled', `gui/${UID}`).stdout.split('\n').find((x) => x.includes(l)) || '') };
     out(JSON.stringify({

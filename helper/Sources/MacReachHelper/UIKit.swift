@@ -81,6 +81,7 @@ enum Panes {
     static let accessibility = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
     static let notifications = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
     static func open(_ s: String) { if let u = URL(string: s) { NSWorkspace.shared.open(u) } }
+    static func openURL(_ s: String) { open(s) }
 }
 
 func copyToPasteboard(_ s: String) {
