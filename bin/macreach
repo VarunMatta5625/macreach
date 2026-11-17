@@ -335,6 +335,7 @@ const commands = {
       clipboardSync: { bool: true, patch: (v) => ({ clipboard: { sync: v } }) },
       idleMinutes: { min: 1, max: 1440, patch: (v) => ({ session: { idleMinutes: v } }) },
       absoluteHours: { min: 1, max: 168, patch: (v) => ({ session: { absoluteHours: v } }) },
+      totpOnTailnet: { bool: true, patch: (v) => ({ totp: { requireOnTailnet: v } }) },   // false (default): the 2FA code is only asked for public Funnel logins
     };
     if (sub !== 'set' || !spec[key]) die('Usage: macreach config set <' + Object.keys(spec).join('|') + '> <value>');
     const sp = spec[key]; let v;

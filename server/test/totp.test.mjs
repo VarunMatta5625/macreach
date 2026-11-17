@@ -17,7 +17,7 @@ const secret = newSecret();
 const RECOVERY = 'abcde-fghij';
 let proc, dir;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const post = (extra = {}) => fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ username: 'u', password: PW, ...extra }) });
+const post = (extra = {}, headers = {}) => fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, ...headers }, body: JSON.stringify({ username: 'u', password: PW, ...extra }) });
 
 test.before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mrtotp-'));
@@ -59,4 +59,16 @@ test('wrong code rejected; recovery code works exactly once', async () => {
   assert.equal((await post({ recovery: RECOVERY })).status, 200);
   await sleep(4000);
   assert.equal((await post({ recovery: RECOVERY })).status, 401);
+});
+
+test('a tailnet login (Tailscale identity header) does not need the code; a Funnel login or a bare request does', async () => {
+  await sleep(1000);
+  const tailnet = await post({}, { 'Tailscale-User-Login': 'owner@example.com' });
+  assert.equal(tailnet.status, 200); assert.deepEqual(await tailnet.json(), { ok: true });
+  const funnel = await post({}, { 'Tailscale-User-Login': 'owner@example.com', 'Tailscale-Funnel-Request': '?1' });
+  assert.deepEqual(await funnel.json(), { need: 'totp' }, 'funnel marker wins over an identity header');
+  const bare = await post();
+  assert.deepEqual(await bare.json(), { need: 'totp' }, 'no header: asked for the code');
+  const wrong = await post({ password: 'wrong' }, { 'Tailscale-User-Login': 'owner@example.com' });
+  assert.equal(wrong.status, 401, 'the password is still required on the tailnet');
 });

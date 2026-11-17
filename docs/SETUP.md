@@ -28,7 +28,7 @@ macreach set-password
 You are asked for a username (first time only) and then the password twice, with no echo.
 Use a long passphrase (12+ characters). It is stored only as an argon2id hash.
 
-Optional two-factor login: `macreach totp enable` (shows a secret and 10 one-time recovery codes; save them).
+Optional two-factor login: `macreach totp enable` (shows a secret and 10 one-time recovery codes; save them). The code is asked for on public (Funnel) logins and not on private Tailscale logins, because a private login already comes from one of your own signed-in devices. To ask for it there too: `macreach config set totpOnTailnet true`.
 
 Check: `macreach status` says `Password : set`.
 
@@ -104,7 +104,7 @@ Your private link (`https://node-….ts.net/`) does not change by itself. It cha
 | Disconnect them / sign out all devices | `macreach kick` / `macreach revoke-all` |
 | Health check | `macreach doctor` |
 
-After updating the code in `~/Desktop/macoanywhere`, run `./install.sh` (or `scripts/build-helper.sh && macreach install`) to redeploy. Logs rotate automatically (over 5 MB, hourly check).
+After updating the code in `<your checkout of this repo>`, run `./install.sh` (or `scripts/build-helper.sh && macreach install`) to redeploy. Logs rotate automatically (over 5 MB, hourly check).
 
 ## Known limits
 

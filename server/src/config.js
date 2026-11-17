@@ -15,7 +15,8 @@ export const DEFAULTS = {
     forceSecureCookies: false, // set true once served over HTTPS (tailscale serve) so a rewritten Host can never downgrade cookies
   },
   paused: false, // remote access paused (CLI: macreach access pause)
-  totp: { enabled: false },
+  // requireOnTailnet: also ask for the code on private (tailnet) logins; by default only public Funnel and local logins need it
+  totp: { enabled: false, requireOnTailnet: false },
   clipboard: { sync: true },
   files: { roots: [HOME], uploadDir: path.join(HOME, 'Downloads', 'MacReach'), maxUploadGB: 20 },
   video: { maxLevel: 5, defaultLevel: 3 },

@@ -2,6 +2,10 @@
 
 MacReach gives whoever signs in full control of your Mac, so it is built to be private by default.
 
+## Two-factor code and the private link
+
+The TOTP code is only requested when a login cannot prove it came over your tailnet. Tailscale Serve removes any client-supplied `Tailscale-User-*` header and adds its own only for tailnet traffic; public Funnel traffic carries none and is marked `Tailscale-Funnel-Request`, so Funnel and local logins always need the code. The password is always required. A tailnet login by someone you shared the Mac with counts as tailnet. Turn the exemption off with `macreach config set totpOnTailnet true`.
+
 ## Design
 
 - The web server listens on `127.0.0.1` only. Remote reach comes from Tailscale Serve (your tailnet) or, if you opt in, Funnel (public internet; login page only).

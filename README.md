@@ -25,6 +25,8 @@ MacReach is not notarized (that needs a paid Apple developer account), so macOS 
 
 Then follow the Setup assistant in the menu bar app: macOS permissions, your password, and Tailscale. **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry), otherwise Tailscale signs it out after 180 days and your link stops working. To update, download the new image, drag the app over the old one and open it once. To remove: menu bar icon > Uninstall MacReach.
 
+**Apple Silicon only** (Intel Macs can build from source below). With the macOS firewall on, the first start may ask whether `tailscaled` may accept incoming connections: click Allow. If you click Deny, Tailscale still works through its relay servers, only slower.
+
 Build the image yourself with `scripts/make-dmg.sh` (needs Swift 6 and `brew install --formula tailscale` on the build Mac).
 
 ## Requirements (building from source)

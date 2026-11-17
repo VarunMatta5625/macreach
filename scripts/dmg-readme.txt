@@ -14,4 +14,6 @@ MacReach: first run
 5. In Tailscale's admin page, turn OFF key expiry for this Mac. Otherwise Tailscale signs it out after 180 days and your link stops
    working until you sign in again. Setup shows the exact steps.
 
-Requires macOS 14 or newer on an Apple Silicon Mac. To remove MacReach: menu bar icon > Uninstall MacReach.
+If the Mac's firewall is on, macOS may ask whether "tailscaled" can accept incoming connections: click Allow. (If you click Deny, Tailscale still works through its relay servers, only slower.)
+
+Requires macOS 14 or newer on an Apple Silicon Mac (M1 or later; Intel Macs are not supported by this download). To remove MacReach: menu bar icon > Uninstall MacReach.

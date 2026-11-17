@@ -123,7 +123,13 @@ export function createServer({ config, helper, getConfig }) {
     };
     if (!(userOk && pwOk)) return fail(auth?.hash ? 'bad-credentials' : 'not-configured');
 
-    if (config.totp.enabled && auth.totp?.secret) {
+    // Tailscale Serve strips any client-supplied Tailscale-User-* header and sets it itself only for tailnet traffic; Funnel (public)
+    // traffic carries none and is marked with Tailscale-Funnel-Request. A tailnet request already came from one of the owner's own
+    // devices, so the second factor adds little there. Anything that cannot prove it is tailnet traffic still gets asked for the code.
+    const viaTailnet = !!req.headers['tailscale-user-login'] && !req.headers['tailscale-funnel-request'];
+    const skipTotp = viaTailnet && !config.totp.requireOnTailnet;
+    if (skipTotp && config.totp.enabled && auth.totp?.secret) audit({ event: 'totp-skipped', reason: 'tailnet', user: username.slice(0, 40), ip });
+    if (config.totp.enabled && auth.totp?.secret && !skipTotp) {
       const code = body.totp ? String(body.totp) : '', rec = body.recovery ? String(body.recovery) : '';
       if (!code && !rec) { audit({ event: 'login', ok: false, reason: 'awaiting-totp', user: username.slice(0, 40), ip, ua }); return send(req, res, 200, { need: 'totp' }); }
       let good = false;
