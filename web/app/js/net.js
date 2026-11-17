@@ -7,7 +7,7 @@ export class Net extends EventTarget {
   constructor() {
     super();
     this.ws = null; this.open = false; this.closedForGood = false;
-    this.attempt = 0; this.rtt = 0; this.onVideo = null; this._pingN = 0; this._pings = new Map();
+    this.attempt = 0; this.rtt = 0; this.rttAvg = 0; this.onVideo = null; this._pingN = 0; this._pings = new Map();
     this._pingTimer = null;
   }
   connect() {
@@ -25,7 +25,7 @@ export class Net extends EventTarget {
     ws.onmessage = (ev) => {
       if (typeof ev.data !== 'string') { this.onVideo?.(ev.data); return; }
       let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === 'pong') { const t0 = this._pings.get(m.n); if (t0) { this.rtt = performance.now() - t0; this._pings.delete(m.n); } return; }
+      if (m.t === 'pong') { const t0 = this._pings.get(m.n); if (t0) { this.rtt = performance.now() - t0; this.rttAvg = this.rttAvg ? this.rttAvg * 0.7 + this.rtt * 0.3 : this.rtt; this._pings.delete(m.n); } return; }
       this.dispatchEvent(new CustomEvent('msg', { detail: m }));
     };
     ws.onclose = (ev) => {

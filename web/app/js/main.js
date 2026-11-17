@@ -191,6 +191,14 @@ settings.addEventListener('change', (e) => {
   if (key === 'clipSync') net.send({ t: 'clipSync', on: settings.get('clipSync') });
 });
 
+// On a slow path (Funnel, mobile data) the Mac's cursor in the video trails the pointer by a full round trip, which feels broken.
+// Show the device's own pointer then. Hysteresis keeps it from flickering around the threshold.
+setInterval(() => {
+  const r = net.rttAvg;
+  if (!r) return;
+  if (r > 120) stage.classList.add('lag'); else if (r < 70) stage.classList.remove('lag');
+}, 1000);
+
 function renderHud() {
   if (!settings.get('showStats')) { ui.setHud(''); return; }
   const q = S.qstats, p = S.params;
