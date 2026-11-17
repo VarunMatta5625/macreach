@@ -9,6 +9,7 @@ const ICONS = {
   zoom: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4M8 11h6"/>',
   clip: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/>',
   files: '<path d="M3 6h6l2 2h10v11H3z"/>',
+  mission: '<rect x="3" y="4" width="8" height="6" rx="1"/><rect x="13" y="4" width="8" height="6" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   stats: '<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',

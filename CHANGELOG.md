@@ -5,6 +5,7 @@
 - Setup assistant and Settings show Tailscale sign-in, MagicDNS/HTTPS certificates, private link and key-expiry state, and can be reopened any time from the menu.
 - "Add phone or tablet" window: app-store links, QR code of the private link, tailnet device list.
 - `macreach://settings|setup|add-device` deep links; single running instance.
+- Web: toolbar button for Mission Control (same action as the Mission Ctrl chip in the shortcut bar).
 - Web: on a slow path (smoothed round trip over 120 ms) the browser shows its own pointer over the screen so it moves instantly, instead of waiting for the Mac's cursor to come back in the video.
 - Fixed: the device list in Add a phone or tablet showed dozens of Funnel relay peers (funnel-ingress-node); only your own devices are listed now.
 - Setup, Settings and Add a phone or tablet now give MacReach a Dock icon while a window is open, and it returns to menu-bar-only when the last window closes.

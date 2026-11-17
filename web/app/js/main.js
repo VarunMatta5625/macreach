@@ -54,6 +54,7 @@ function buildToolbar() {
   const touch = Device.isTouchPrimary || Device.hasTouch;
   ui.addButton('kbd', 'kbd', 'On-screen keyboard (use your keyboard, dictation or emoji)', () => { kb.toggleOSK(); }, { show: touch });
   ui.addButton('keys', 'keys', 'Shortcut keys', () => { settings.set('keyBar', !settings.get('keyBar')); });
+  ui.addButton('mission', 'mission', 'Mission Control (see all windows)', () => kb.command('missionControl'));
   ui.addButton('mode', 'ptr', 'Touch mode', (b) => ui.menu(b, [
     { label: (settings.get('touchMode') === 'direct' ? '● ' : '○ ') + 'Direct (touchscreen)', fn: () => settings.set('touchMode', 'direct') },
     { label: (settings.get('touchMode') === 'trackpad' ? '● ' : '○ ') + 'Trackpad (relative cursor)', fn: () => settings.set('touchMode', 'trackpad') },
