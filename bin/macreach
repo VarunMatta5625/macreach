@@ -1,0 +1,448 @@
+#!/usr/bin/env node
+// MacReach command line. Secrets are only ever read from the controlling terminal (/dev/tty) with echo off:
+// never from argv, environment variables, stdin pipes or files.
+import fs from 'node:fs';
+import http from 'node:http';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const src = (f) => import(path.join(root, 'server', 'src', f));
+
+const { AUTH_FILE, SESSIONS_FILE, CTL_SOCK, DATA_DIR } = await src('paths.js');
+const { readAuth, writeAuth, updateAuth } = await src('authstore.js');
+const { loadConfig, saveConfigPatch } = await src('config.js');
+const { audit, readAudit } = await src('audit.js');
+const { prompt } = await src('tty.js');
+
+const HOME = os.homedir();
+const APP_SUPPORT = path.join(HOME, 'Library', 'Application Support', 'MacReach');
+const RUNTIME = path.join(APP_SUPPORT, 'runtime');
+const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
+const LOGS = path.join(HOME, 'Library', 'Logs', 'MacReach');
+const HELPER_BIN = path.join(HOME, 'Applications', 'MacReach.app', 'Contents', 'MacOS', 'MacReach');
+const LABELS = { server: 'com.macreach.server', helper: 'com.macreach.helper', tailscaled: 'com.macreach.tailscaled' };
+const TS_DIR = path.join(APP_SUPPORT, 'tailscale');
+const TS_SOCK = path.join(TS_DIR, 'ts.sock');
+const TS_BIN = ['/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'].find((f) => fs.existsSync(f));
+const TSD_BIN = ['/opt/homebrew/bin/tailscaled', '/usr/local/bin/tailscaled'].find((f) => fs.existsSync(f));
+const ts = (...a) => spawnSync(TS_BIN, ['--socket=' + TS_SOCK, ...a], { encoding: 'utf8', timeout: 20000, input: '' });   // timeout: tailscale can wait forever for a browser step
+const tsJson = (...a) => { const r = ts(...a); try { return JSON.parse(r.stdout); } catch { return null; } };
+const UID = process.getuid();
+const launchctl = (...a) => spawnSync('launchctl', a, { encoding: 'utf8' });
+const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const plist = (label, args, extra = '') => `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key><array>${args.map((a) => `<string>${xml(a)}</string>`).join('')}</array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>StandardOutPath</key><string>${xml(path.join(LOGS, label.split('.').pop() + '.log'))}</string>
+  <key>StandardErrorPath</key><string>${xml(path.join(LOGS, label.split('.').pop() + '.log'))}</string>
+${extra}</dict></plist>
+`;
+const out = (s = '') => process.stdout.write(s + '\n');
+const die = (s, code = 1) => { process.stderr.write(s + '\n'); process.exit(code); };
+
+// ---------- control socket ----------
+function ctl(method, p) {
+  return new Promise((resolve) => {
+    const q = http.request({ socketPath: CTL_SOCK, path: p, method, headers: { host: 'localhost' }, timeout: 4000 }, (r) => {
+      let b = ''; r.on('data', (d) => (b += d));
+      r.on('end', () => { let j = null; try { j = JSON.parse(b); } catch {} resolve({ ok: r.statusCode === 200, status: r.statusCode, json: j }); });
+    });
+    q.on('error', () => resolve({ ok: false, status: 0, json: null }));
+    q.on('timeout', () => { q.destroy(); });
+    q.end();
+  });
+}
+async function revokeAllSessions() {
+  const r = await ctl('POST', '/_ctl/revoke-all');
+  if (!r.ok) { try { fs.unlinkSync(SESSIONS_FILE); } catch {} }   // server not running: drop the persisted sessions instead
+  return r.ok;
+}
+
+// ---------- commands ----------
+const commands = {
+  async install() {
+    if (process.env.MACREACH_DATA_DIR) die('Refusing to install while MACREACH_DATA_DIR is set (that is a test data dir).');
+    if (!fs.existsSync(HELPER_BIN)) die(`Helper app missing: run scripts/build-helper.sh first (${HELPER_BIN}).`);
+    // Run from a copy outside ~/Desktop so launchd/node never needs the Desktop-folder privacy grant.
+    // `root` is the runtime copy itself when invoked through the ~/.local/bin symlink: use the recorded repo path instead.
+    let srcRoot = root;
+    const repoFile = path.join(RUNTIME, '.repo-path');
+    if (root === RUNTIME || root.startsWith(RUNTIME + path.sep)) {
+      try { srcRoot = fs.readFileSync(repoFile, 'utf8').trim(); } catch {}
+      if (!srcRoot || srcRoot === RUNTIME || !fs.existsSync(path.join(srcRoot, 'server', 'src', 'index.js'))) die('Cannot find the source repo. Run install from the repo itself: <repo>/bin/macreach install');
+    }
+    fs.mkdirSync(RUNTIME, { recursive: true, mode: 0o700 }); fs.mkdirSync(LOGS, { recursive: true });
+    fs.writeFileSync(repoFile, srcRoot + '\n', { mode: 0o600 });
+    // Stop the server first (KeepAlive would restart it mid-copy and it would load half a tree), then copy into a staging
+    // directory and swap each folder in with a rename.
+    launchctl('bootout', `gui/${UID}/${LABELS.server}`);
+    for (let t = 0; t < 20 && launchctl('print', `gui/${UID}/${LABELS.server}`).status === 0; t++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    const stage = path.join(RUNTIME, '.stage'); fs.rmSync(stage, { recursive: true, force: true }); fs.mkdirSync(stage);
+    const keep = (f) => !/[\\/](test|\.DS_Store)$/.test(f);
+    fs.cpSync(path.join(srcRoot, 'bin'), path.join(stage, 'bin'), { recursive: true });
+    fs.cpSync(path.join(srcRoot, 'server'), path.join(stage, 'server'), { recursive: true, filter: keep });
+    fs.cpSync(path.join(srcRoot, 'web'), path.join(stage, 'web'), { recursive: true, filter: keep });
+    for (const d of ['bin', 'server', 'web']) { fs.rmSync(path.join(RUNTIME, d), { recursive: true, force: true }); fs.renameSync(path.join(stage, d), path.join(RUNTIME, d)); }
+    fs.rmSync(stage, { recursive: true, force: true });
+    fs.chmodSync(path.join(RUNTIME, 'bin', 'macreach'), 0o755);
+    const bin = path.join(HOME, '.local', 'bin'); fs.mkdirSync(bin, { recursive: true });
+    const link = path.join(bin, 'macreach'); try { fs.unlinkSync(link); } catch {}
+    fs.symlinkSync(path.join(RUNTIME, 'bin', 'macreach'), link);
+    fs.mkdirSync(AGENTS, { recursive: true });
+    const env = `  <key>EnvironmentVariables</key><dict><key>PATH</key><string>${path.dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>\n`;
+    fs.writeFileSync(path.join(AGENTS, LABELS.server + '.plist'), plist(LABELS.server, [process.execPath, path.join(RUNTIME, 'server', 'src', 'index.js')], `  <key>WorkingDirectory</key><string>${xml(RUNTIME)}</string>\n${env}`));
+    fs.writeFileSync(path.join(AGENTS, LABELS.helper + '.plist'), plist(LABELS.helper, [HELPER_BIN], `  <key>ProcessType</key><string>Interactive</string>\n  <key>AssociatedBundleIdentifiers</key><string>com.macreach.helper</string>\n${env}`));
+    if (TSD_BIN) {
+      fs.mkdirSync(TS_DIR, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(AGENTS, LABELS.tailscaled + '.plist'), plist(LABELS.tailscaled, [TSD_BIN, '--tun=userspace-networking', '--socket=' + TS_SOCK, '--statedir=' + path.join(TS_DIR, 'state'), '--port=0']));
+    }
+    for (const l of Object.values(LABELS)) {
+      if (l === LABELS.tailscaled && !TSD_BIN) continue;
+      launchctl('bootout', `gui/${UID}/${l}`);
+      launchctl('enable', `gui/${UID}/${l}`);   // "Start at login" off disables the job, and bootstrap refuses a disabled one
+      let r;
+      for (let t = 0; t < 10; t++) {   // bootout is asynchronous: retry until the old job is really gone
+        r = launchctl('bootstrap', `gui/${UID}`, path.join(AGENTS, l + '.plist'));
+        if (r.status === 0) break;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+      }
+      if (r.status !== 0) die(`launchctl bootstrap ${l} failed: ${r.stderr.trim()}`);
+    }
+    out('Installed. Server, helper and Tailscale daemon now start at login and restart if they exit.\nCLI: ' + link + '\nLogs: ' + LOGS);
+  },
+
+  /** Remove MacReach. Default keeps your data (password, config, audit log, Tailscale login); --purge deletes that too. */
+  async uninstall(flag) {
+    const purge = flag === '--purge';
+    if (purge && prompt('This deletes your MacReach password, settings, audit log and Tailscale login on this Mac. Type "delete" to continue: ').trim() !== 'delete') die('Cancelled. Nothing changed.');
+    if (TS_BIN && fs.existsSync(TS_SOCK)) { ts('serve', 'reset'); }   // never leave a public/private route pointing at nothing
+    for (const l of Object.values(LABELS)) { launchctl('bootout', `gui/${UID}/${l}`); try { fs.unlinkSync(path.join(AGENTS, l + '.plist')); } catch {} }
+    fs.rmSync(path.join(HOME, 'Applications', 'MacReach.app'), { recursive: true, force: true });
+    try { fs.unlinkSync(path.join(HOME, '.local', 'bin', 'macreach')); } catch {}
+    spawnSync('defaults', ['delete', 'com.macreach.helper'], { stdio: 'ignore' });
+    fs.rmSync(RUNTIME, { recursive: true, force: true });
+    if (purge) { fs.rmSync(APP_SUPPORT, { recursive: true, force: true }); fs.rmSync(LOGS, { recursive: true, force: true }); }
+    out(purge ? 'MacReach removed, including all its data.' : 'MacReach removed. Your password, settings and Tailscale login are kept in ' + APP_SUPPORT + ' (delete them with: macreach uninstall --purge, or by hand).');
+    out('macOS keeps the Screen Recording / Accessibility entries: remove MacReach from System Settings > Privacy & Security if you want them gone. Also remove this Mac from login.tailscale.com/admin/machines.');
+  },
+
+  // ---- remote access: Tailscale Serve (private) / Funnel (public) / pause / kill ----
+  async access(sub, arg) {
+    const cfg = loadConfig();
+    if (!TS_BIN && sub !== 'pause' && sub !== 'resume') die('Tailscale is not installed: brew install --formula tailscale, then macreach install.');
+    const info = () => {
+      const st = tsJson('status', '--json');
+      return { state: st?.BackendState || 'DaemonDown', dns: (st?.Self?.DNSName || '').replace(/\.$/, ''), st };
+    };
+    const reload = () => ctl('POST', '/_ctl/reload');
+    // Only touch Funnel when it is actually on, and never `funnel reset`: it also wipes the private Serve link.
+    const funnelOff = () => { if (TS_BIN && /Funnel on/i.test(ts('serve', 'status').stdout || '')) ts('funnel', '--https=443', 'off'); };
+
+    if (sub === 'login') {
+      // The machine name ends up in the public HTTPS certificate (Certificate Transparency logs), so keep it neutral.
+      let name = (arg && !arg.startsWith('--') ? arg : '') || cfg.tsHostname;
+      if (!name) { name = 'node-' + crypto.randomBytes(3).toString('hex'); saveConfigPatch({ tsHostname: name }); }
+      if (!/^[a-z0-9-]{1,40}$/.test(name)) die('Hostname: lowercase letters, digits and - only.');
+      out(`Opening Tailscale sign-in as "${name}". Open the printed link in a browser and approve this Mac.`);
+      const args = ['--socket=' + TS_SOCK, 'up', '--hostname=' + name, '--accept-dns=false'];
+      if (process.argv.includes('--open')) {   // menu bar app: open the sign-in link in the browser as soon as it is printed
+        const { spawn } = await import('node:child_process');
+        const c = spawn(TS_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let opened = false; const scan = (d) => { process.stdout.write(d); const m = !opened && /https:\/\/login\.tailscale\.com\/\S+/.exec(String(d)); if (m) { opened = true; spawnSync('open', [m[0]]); } };
+        c.stdout.on('data', scan); c.stderr.on('data', scan);
+        return c.on('exit', (code) => process.exit(code ?? 0));
+      }
+      const r = spawnSync(TS_BIN, args, { stdio: 'inherit' });
+      return process.exit(r.status ?? 0);
+    }
+    if (sub === 'serve') {   // private: only devices on your tailnet
+      const i = info(); if (i.state !== 'Running') die(`Tailscale is not signed in (state: ${i.state}). Run: macreach access login`);
+      const port = (await ctl('GET', '/_ctl/status')).json?.port || cfg.port;
+      const r = ts('serve', '--bg', '--https=443', `http://127.0.0.1:${port}`);
+      out((r.stdout + r.stderr).trim());
+      if (r.status !== 0) die('tailscale serve failed (is HTTPS enabled for your tailnet? https://login.tailscale.com/admin/dns).');
+      saveConfigPatch({ hosts: [...new Set([...(cfg.hosts || []), i.dns])], security: { forceSecureCookies: true } });
+      await reload(); audit({ event: 'access-serve', host: i.dns, via: 'cli' });
+      return out(`\nPrivate URL (tailnet devices only): https://${i.dns}/`);
+    }
+    if (sub === 'funnel') {  // public internet
+      if (arg === 'off') { funnelOff(); audit({ event: 'access-funnel-off', via: 'cli' }); return out('Public access (Funnel) is OFF.'); }
+      const i = info(); if (i.state !== 'Running') die('Tailscale is not signed in. Run: macreach access login');
+      if (!readAuth()?.hash) die('Refusing to go public with no password set. Run: macreach set-password');
+      out(`This makes https://${i.dns}/ reachable by ANYONE on the internet (they will only see your login page).`);
+      const typed = process.argv.includes('--confirm') ? process.argv[process.argv.indexOf('--confirm') + 1] : prompt('Type "go public" to continue: ');   // --confirm: the menu bar app collected the phrase itself
+      if ((typed || '').trim() !== 'go public') die('Cancelled. Nothing changed.');
+      const port = (await ctl('GET', '/_ctl/status')).json?.port || cfg.port;
+      const r = ts('funnel', '--bg', '--https=443', `http://127.0.0.1:${port}`);
+      out((r.stdout + r.stderr).trim());
+      if (r.status !== 0) die('tailscale funnel failed.');
+      saveConfigPatch({ hosts: [...new Set([...(cfg.hosts || []), i.dns])], security: { forceSecureCookies: true } });
+      await reload(); audit({ event: 'access-funnel-on', host: i.dns, via: 'cli' });
+      return out(`\nPublic URL: https://${i.dns}/`);
+    }
+    if (sub === 'pause') { funnelOff(); saveConfigPatch({ paused: true }); await reload(); audit({ event: 'access-pause', via: 'cli' }); return out('PAUSED: public access off; every request is refused (503); controller disconnected. Resume: macreach access resume'); }
+    if (sub === 'resume') { saveConfigPatch({ paused: false }); await reload(); audit({ event: 'access-resume', via: 'cli' }); return out('Resumed. (Public access stays off until: macreach access funnel)'); }
+    if (sub === 'kill') {    // everything off, nothing restarts on its own
+      funnelOff(); ts('serve', 'reset'); saveConfigPatch({ paused: true }); await reload();
+      for (const l of [LABELS.server, LABELS.tailscaled]) launchctl('bootout', `gui/${UID}/${l}`);
+      audit({ event: 'access-kill', via: 'cli' });
+      return out('KILLED: funnel and serve reset, web server and Tailscale daemon stopped, and access stays paused (also after a reboot) until you run: macreach install && macreach access resume && macreach access serve');
+    }
+    const i = info();
+    out(`Tailscale   : ${i.state}${i.dns ? '  (' + i.dns + ')' : ''}`);
+    const sv = ts('serve', 'status').stdout.trim(); out('Serve/Funnel: ' + (sv || 'not configured').replace(/\n/g, '\n              '));
+    out(`Paused      : ${cfg.paused ? 'YES' : 'no'}`);
+    if (sub && sub !== 'status') out('\nUsage: macreach access [status|login [name]|serve|funnel [off]|pause|resume|kill]');
+  },
+
+  async doctor() {
+    let bad = 0;
+    const row = (ok, label, detail = '', fix = '') => { if (ok === false) bad++; out(`${ok === true ? '[ ok ]' : ok === false ? '[FAIL]' : '[warn]'} ${label}${detail ? ': ' + detail : ''}${ok !== true && fix ? '\n         fix: ' + fix : ''}`); };
+    const cfg = loadConfig(), auth = readAuth();
+    const st = await ctl('GET', '/_ctl/status');
+    row(st.ok, 'web server', st.ok ? `up ${Math.round(st.json.uptime / 60)} min on 127.0.0.1:${st.json.port}` : 'not running', 'macreach install');
+    for (const l of Object.values(LABELS)) { if (l === LABELS.tailscaled && !TSD_BIN) continue; row(launchctl('print', `gui/${UID}/${l}`).status === 0, 'launch agent ' + l, '', 'macreach install'); }
+    const h = st.json?.helper;
+    row(!!st.json?.helperUp, 'helper app connected', '', 'macreach restart; macreach logs helper');
+    row(!!h?.screen, 'Screen Recording permission', h?.screen ? 'granted' : 'not granted', 'System Settings > Privacy & Security > Screen & System Audio Recording > enable MacReach');
+    row(!!h?.accessibility, 'Accessibility permission (mouse/keyboard)', h?.accessibility ? 'granted' : 'not granted', 'System Settings > Privacy & Security > Accessibility > enable MacReach');
+    row(h?.locked ? null : true, 'screen not locked', h?.locked ? 'locked: remote control cannot work until unlocked at the Mac' : '');
+    row(!!auth?.hash, 'password set', '', 'macreach set-password (in your own Terminal)');
+    row(true, 'two-factor', cfg.totp.enabled && auth?.totp?.secret ? 'on' : 'off (optional: macreach totp enable)');
+    // power: a sleeping Mac can't be reached
+    const pm = spawnSync('pmset', ['-g', 'custom'], { encoding: 'utf8' }).stdout || '';
+    const ac = pm.split('AC Power:')[1] || '';
+    const sleepAc = /\n\s*sleep\s+(\d+)/.exec(ac)?.[1];
+    row(sleepAc === '0' ? true : null, 'Mac stays awake on power', sleepAc === undefined ? 'unknown' : `system sleep after ${sleepAc} min on AC`, 'sudo pmset -c sleep 0   (display may still sleep; lid closed = unreachable)');
+    // tailscale
+    if (!TS_BIN) row(null, 'tailscale', 'not installed', 'brew install --formula tailscale');
+    else {
+      const i = tsJson('status', '--json'), state = i?.BackendState || 'DaemonDown', dns = (i?.Self?.DNSName || '').replace(/\.$/, '');
+      row(state === 'Running' ? true : null, 'tailscale', state + (dns ? ' as ' + dns : ''), 'macreach access login');
+      const exp = i?.Self?.KeyExpiry ? Date.parse(i.Self.KeyExpiry) : 0;   // an expired node key silently breaks the link
+      if (exp) { const d = Math.round((exp - Date.now()) / 86400000); row(d > 30 ? true : null, 'tailscale key expiry', d > 0 ? `in ${d} days` : 'EXPIRED', 'login.tailscale.com/admin/machines > this machine > ... > Disable key expiry'); }
+      const sv = ts('serve', 'status').stdout;
+      const serving = /127\.0\.0\.1/.test(sv), funnel = /Funnel on/i.test(sv);
+      row(serving ? true : null, 'private URL (tailnet)', serving ? `https://${dns}/` : 'not configured', 'macreach access serve');
+      row(true, 'public URL (Funnel)', funnel ? `ON https://${dns}/` : 'off');
+      row(cfg.security.forceSecureCookies || !serving ? true : false, 'cookies forced Secure when served over HTTPS');
+      if (funnel && dns) {
+        const ip = spawnSync('dig', ['+short', '@1.1.1.1', dns], { encoding: 'utf8' }).stdout.split('\n').find((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
+        const c = ip ? spawnSync('curl', ['-sS', '-m', '10', '--resolve', `${dns}:443:${ip}`, `https://${dns}/`], { encoding: 'utf8' }) : null;
+        row(!!c && c.status === 0 && /Sign in/.test(c.stdout), 'public URL answers from the internet', ip ? `via ${ip}` : 'DNS (1.1.1.1) has no record yet');
+      }
+    }
+    // XFF: per-IP rate limiting needs the real client address
+    const logins = readAudit(200).filter((e) => e.event === 'login' && e.ip);
+    if (logins.length) { const all = logins.every((e) => /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(e.ip)); row(all && (cfg.hosts || []).length ? null : true, 'client IPs visible in audit log', all ? 'all logins show 127.0.0.1: the proxy sends no X-Forwarded-For, so rate limiting is global only' : 'ok'); }
+    row(cfg.paused ? null : true, 'not paused', cfg.paused ? 'PAUSED: all requests refused' : '', 'macreach access resume');
+    out(bad ? `\n${bad} problem(s) need attention.` : '\nAll required checks passed.');
+    process.exit(bad ? 1 : 0);
+  },
+
+  async card() {
+    const cfg = loadConfig();
+    const i = TS_BIN ? tsJson('status', '--json') : null;
+    const dns = (i?.Self?.DNSName || '').replace(/\.$/, '');
+    const sv = TS_BIN ? ts('serve', 'status').stdout : '';
+    const serving = /127\.0\.0\.1/.test(sv), funnel = /Funnel on/i.test(sv);
+    const line = '-'.repeat(64);
+    out(line);
+    out(' MacReach access card');
+    out(line);
+    out(` Private URL (your devices with Tailscale) : ${serving && dns ? 'https://' + dns + '/' : 'not set up   (macreach access serve)'}`);
+    out(` Public URL  (anyone can reach the login)  : ${funnel && dns ? 'https://' + dns + '/' : 'OFF          (macreach access funnel)'}`);
+    out(` Local (this Mac only)                     : http://localhost:${cfg.port}/`);
+    out(` Sign-in: username "${readAuth()?.username ?? '(not set)'}" + your password${cfg.totp.enabled ? ' + 6-digit code' : ''}`);
+    out(line);
+    out(' PAUSE  remote access (reversible):  macreach access pause    / macreach access resume');
+    out(' KILL   everything (stops server):   macreach access kill');
+    out(' PUBLIC OFF only:                    macreach access funnel off');
+    out(' Who is connected / kick them:       macreach status   /   macreach kick');
+    out(' Sign out every device:              macreach revoke-all');
+    out(' Check health:                       macreach doctor');
+    out(' Away from the Mac: login.tailscale.com/admin/machines > this machine > Disable Funnel / Remove.');
+    out(' Not reachable: lid closed, Mac asleep, at the login window, or screen locked.');
+    out(line);
+  },
+
+  /** Machine-readable state for the menu bar app and settings window. */
+  async info() {
+    const cfg = loadConfig(), auth = readAuth();
+    const st = await ctl('GET', '/_ctl/status');
+    let ts_ = { state: TS_BIN ? 'DaemonDown' : 'NotInstalled', dns: '', serving: false, funnel: false };
+    if (TS_BIN) {
+      const i = tsJson('status', '--json'); const sv = ts('serve', 'status').stdout;
+      ts_ = { state: i?.BackendState || 'DaemonDown', dns: (i?.Self?.DNSName || '').replace(/\.$/, ''), serving: /127\.0\.0\.1/.test(sv), funnel: /Funnel on/i.test(sv) };
+    }
+    const agents = {}; for (const [k, l] of Object.entries(LABELS)) agents[k] = { loaded: launchctl('print', `gui/${UID}/${l}`).status === 0, enabled: !/disabled/.test(launchctl('print-disabled', `gui/${UID}`).stdout.split('\n').find((x) => x.includes(l)) || '') };
+    out(JSON.stringify({
+      serverUp: st.ok, port: st.json?.port || cfg.port, paused: !!cfg.paused, passwordSet: !!auth?.hash, username: auth?.username || '', totp: !!(cfg.totp.enabled && auth?.totp?.secret),
+      tailscale: ts_, privateUrl: ts_.serving && ts_.dns ? `https://${ts_.dns}/` : '', publicUrl: ts_.funnel && ts_.dns ? `https://${ts_.dns}/` : '', localUrl: `http://localhost:${st.json?.port || cfg.port}/`,
+      config: { allowTakeover: !!cfg.security.allowTakeover, clipboardSync: !!cfg.clipboard.sync, idleMinutes: cfg.session.idleMinutes, absoluteHours: cfg.session.absoluteHours },
+      agents, version: '1.0',
+    }));
+  },
+
+  /** macreach config set <key> <value>: a small whitelist the settings window uses. */
+  async config(sub, key, value) {
+    const spec = {
+      allowTakeover: { bool: true, patch: (v) => ({ security: { allowTakeover: v } }) },
+      clipboardSync: { bool: true, patch: (v) => ({ clipboard: { sync: v } }) },
+      idleMinutes: { min: 1, max: 1440, patch: (v) => ({ session: { idleMinutes: v } }) },
+      absoluteHours: { min: 1, max: 168, patch: (v) => ({ session: { absoluteHours: v } }) },
+    };
+    if (sub !== 'set' || !spec[key]) die('Usage: macreach config set <' + Object.keys(spec).join('|') + '> <value>');
+    const sp = spec[key]; let v;
+    if (sp.bool) { if (!['true', 'false'].includes(value)) die('Value must be true or false.'); v = value === 'true'; }
+    else { v = Number(value); if (!Number.isInteger(v) || v < sp.min || v > sp.max) die(`Value must be an integer ${sp.min}..${sp.max}.`); }
+    saveConfigPatch(sp.patch(v)); await ctl('POST', '/_ctl/reload'); audit({ event: 'config-change', key, value: v, via: 'cli' });
+    out(`${key} = ${v}`);
+  },
+
+  /** Start MacReach at login (default) or not. Does not stop anything that is running now. */
+  async autostart(sub) {
+    const labels = Object.values(LABELS).filter((l) => l !== LABELS.tailscaled || TSD_BIN);
+    if (sub === 'on' || sub === 'off') { for (const l of labels) launchctl(sub === 'on' ? 'enable' : 'disable', `gui/${UID}/${l}`); }
+    const dis = launchctl('print-disabled', `gui/${UID}`).stdout;
+    const on = labels.every((l) => !new RegExp(`"${l}"\\s*=>\\s*(disabled|true)`).test(dis));
+    out(sub === 'status' || !sub ? (on ? 'on' : 'off') : `Start at login: ${sub}`);
+  },
+
+  /** Stop everything now; it all starts again at the next login (plists stay in place). */
+  async stop() {
+    // helper last: the CLI runs as a child of the helper when started from its menu, so booting it out earlier would kill us before tailscaled is stopped
+    for (const l of [LABELS.server, LABELS.tailscaled, LABELS.helper]) launchctl('bootout', `gui/${UID}/${l}`);
+    out('Stopped. MacReach starts again at your next login, or now with: macreach install');
+  },
+
+  async grant() {   // makes the launchd-run helper (not Terminal) ask macOS for its permissions
+    const r = await ctl('POST', '/_ctl/perms');
+    if (!r.ok) die('Helper is not running. Try: macreach restart');
+    out('macOS should now show permission prompts for MacReach (Screen Recording, Accessibility).\nApprove them in System Settings > Privacy & Security, then run: macreach doctor');
+  },
+
+  async restart() { for (const l of Object.values(LABELS)) launchctl('kickstart', '-k', `gui/${UID}/${l}`); out('Restarted.'); },
+
+  async logs(which = 'server') { spawnSync('tail', ['-n', '60', path.join(LOGS, `${which === 'helper' ? 'helper' : 'server'}.log`)], { stdio: 'inherit' }); },
+
+  async 'set-password'() {
+    const { hashPassword } = await src('password.js');
+    let auth = readAuth();
+    let username = auth?.username;
+    if (!username) {
+      username = prompt('Username for the login page [admin]: ').trim() || 'admin';
+      if (!/^[\w.@-]{1,64}$/.test(username)) die('Username may contain letters, digits and . _ @ - only (max 64).');
+    }
+    const p1 = prompt('New password (min 12 characters, input hidden): ', { hidden: true });
+    if (p1.length < 12) die('Too short: use at least 12 characters (a passphrase of 4+ random words is ideal).');
+    if (p1.length > 512) die('Too long (max 512).');
+    if (p1.toLowerCase() === username.toLowerCase()) die('Password must differ from the username.');
+    const p2 = prompt('Repeat password: ', { hidden: true });
+    if (p1 !== p2) die('Passwords did not match. Nothing changed.');
+    const hash = await hashPassword(p1);
+    writeAuth({ ...(auth || {}), username, hash, totp: auth?.totp ?? null });
+    const revoked = await revokeAllSessions();
+    audit({ event: 'password-changed', via: 'cli' });
+    out(`Password set for "${username}". All existing sessions were signed out${revoked ? '' : ' (server not running; will apply on start)'}.`);
+  },
+
+  async 'set-username'(name) {
+    const auth = readAuth(); if (!auth?.hash) die('Set a password first: macreach set-password');
+    if (!/^[\w.@-]{1,64}$/.test(name || '')) die('Usage: macreach set-username <name>   (letters, digits . _ @ -)');
+    writeAuth({ ...auth, username: name });
+    await revokeAllSessions(); audit({ event: 'username-changed', via: 'cli' });
+    out(`Username is now "${name}". All sessions were signed out.`);
+  },
+
+  async totp(sub) {
+    const T = await src('totp.js');
+    const auth = readAuth(); if (!auth?.hash) die('Set a password first: macreach set-password');
+    const cfg = loadConfig();
+    if (sub === 'status' || !sub) return out(`TOTP: ${cfg.totp.enabled && auth.totp?.secret ? 'enabled' : 'disabled'}${auth.totp?.recovery ? `, ${auth.totp.recovery.length} recovery codes left` : ''}`);
+    if (sub === 'enable') {
+      if (cfg.totp.enabled && auth.totp?.secret) die('Already enabled. Run "macreach totp disable" first to re-enroll.');
+      const secret = T.newSecret(), codes = T.newRecoveryCodes(10);
+      out('\nAdd this to your authenticator app (1Password, Authy, Google Authenticator, ...):\n');
+      out('  Secret : ' + secret.replace(/(.{4})/g, '$1 ').trim());
+      out('  Link   : ' + T.otpauthUri(secret, auth.username));
+      out('\nRecovery codes (each works once; store them somewhere safe, they are shown only now):\n');
+      codes.forEach((c) => out('  ' + c));
+      out('');
+      const code = prompt('Enter the 6-digit code from your app to confirm: ').trim();
+      const step = T.verifyTotp(secret, code);
+      if (step === null) die('Code did not match. TOTP was NOT enabled.');
+      writeAuth({ ...readAuth(), totp: { secret, lastStep: step, recovery: codes.map(T.hashRecovery) } });
+      saveConfigPatch({ totp: { enabled: true } });
+      await ctl('POST', '/_ctl/reload'); audit({ event: 'totp-enabled', via: 'cli' });
+      return out('TOTP enabled. The login page will now ask for a code.');
+    }
+    if (sub === 'disable') {
+      if (prompt('Type "disable" to turn two-factor off: ').trim() !== 'disable') die('Cancelled.');
+      updateAuth((a) => { a.totp = null; });
+      saveConfigPatch({ totp: { enabled: false } });
+      await ctl('POST', '/_ctl/reload'); audit({ event: 'totp-disabled', via: 'cli' });
+      return out('TOTP disabled.');
+    }
+    die('Usage: macreach totp [status|enable|disable]');
+  },
+
+  async status() {
+    const r = await ctl('GET', '/_ctl/status');
+    const auth = readAuth(), cfg = loadConfig();
+    out(`Server      : ${r.ok ? `running (up ${Math.round(r.json.uptime / 60)} min, port ${r.json.port})` : 'NOT running'}`);
+    if (r.ok) {
+      out(`Helper      : ${r.json.helperUp ? 'connected' : 'NOT connected'}${r.json.helper ? ` (screen recording=${r.json.helper.screen ? "granted" : "NOT granted"}, accessibility=${r.json.helper.accessibility ? "granted" : "NOT granted"}${r.json.helper.locked ? ", screen locked" : ""})` : ''}`);
+      out(`Controller  : ${r.json.active ? `${r.json.active.ip} since ${new Date(r.json.active.since).toLocaleString()}` : 'nobody connected'}`);
+      out(`Sessions    : ${r.json.sessions}`);
+    }
+    out(`Password    : ${auth?.hash ? 'set' : 'NOT set (run: macreach set-password)'}`);
+    out(`Two-factor  : ${cfg.totp.enabled && auth?.totp?.secret ? 'on' : 'off'}`);
+    out(`Paused      : ${cfg.paused ? 'YES (remote access refused)' : 'no'}`);
+  },
+
+  async audit(n) {
+    const rows = readAudit(Math.min(Math.max(parseInt(n) || 25, 1), 500));
+    if (!rows.length) return out('(no entries)');
+    for (const r of rows) { const { ts, event, ...rest } = r; out(`${ts}  ${String(event).padEnd(18)} ${Object.entries(rest).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ')}`); }
+  },
+
+  async kick() { const r = await ctl('POST', '/_ctl/kick'); out(r.ok ? 'Disconnected the active controller.' : 'Server not running.'); },
+  async 'revoke-all'() { const ok = await revokeAllSessions(); out(ok ? 'All sessions revoked and the controller disconnected.' : 'Server not running; persisted sessions deleted.'); },
+};
+
+const help = `macreach <command>
+
+  set-password        set/change the login password (hidden prompt; signs out all sessions)
+  set-username <name> change the login username
+  totp [status|enable|disable]   two-factor authentication
+  install | uninstall [--purge] | restart | logs [server|helper]   auto-start agents
+  access [status|login [name]|serve|funnel [off]|pause|resume|kill]   Tailscale private/public access
+  card                print the access card (URLs, pause/kill commands)
+  grant               ask macOS for Screen Recording + Accessibility permissions
+  doctor              check everything (permissions, agents, tailscale, power)
+  status              server, helper, sessions, pause state
+  audit [n]           last n audit-log entries
+  info                machine-readable state (JSON) for the menu bar app
+  config set <key> <value>   allowTakeover | clipboardSync | idleMinutes | absoluteHours
+  autostart [on|off|status]  start MacReach at login
+  stop                stop everything until the next login
+  kick                disconnect whoever is controlling now
+  revoke-all          sign out every session
+`;
+
+const [cmd, ...args] = process.argv.slice(2);
+if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') { out(help); process.exit(0); }
+if (!commands[cmd]) die(`Unknown command: ${cmd}\n\n${help}`);
+try { await commands[cmd](...args); } catch (e) { die(`Error: ${e.message}`); }
+void AUTH_FILE; void DATA_DIR;

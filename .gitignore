@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+.build/
+*.log
+.playwright-mcp/
+.claude/
+# never commit secrets or local state
+auth.json
+config.json
+sessions.json
+*.pem
+*.p12
+*.keychain-db
+kc.pw

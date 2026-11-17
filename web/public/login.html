@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="dark light">
+<title>Sign in</title>
+<link rel="icon" href="/_/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/_/icon-180.png">
+<link rel="stylesheet" href="/_/login.css">
+</head>
+<body>
+<main>
+  <form id="f" autocomplete="on" novalidate>
+    <h1>Sign in</h1>
+    <label>Username<input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
+    <label>Password<input id="p" name="password" type="password" autocomplete="current-password" required></label>
+    <label id="tw" hidden>Authentication code<input id="t" name="totp" inputmode="numeric" autocomplete="one-time-code" maxlength="20" placeholder="123456 or recovery code"></label>
+    <label id="rw" hidden class="row"><input id="r" type="checkbox"> Remember this device</label>
+    <button id="b" type="submit">Continue</button>
+    <p id="e" role="alert" aria-live="polite"></p>
+  </form>
+</main>
+<script src="/_/login.js" type="module"></script>
+</body>
+</html>
