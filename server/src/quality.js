@@ -27,7 +27,7 @@ export class QualityController {
     this.lastChange = Date.now();
     this.lastCongestion = 0;
     this.waitKey = false;        // dropped a P-frame: discard until next keyframe
-    this.lastKeyReq = 0;
+    this.lastKeyReq = 0; this.keyGap = 400;
     this.lastUp = 0;             // when we last climbed
     this.climbWait = 6000;       // how long the link must be calm before climbing; doubles when a climb is punished
   }
@@ -60,16 +60,19 @@ export class QualityController {
   }
 
   /** A keyframe is several times a delta frame. Asking for one while the path is still draining the burst that caused the drop just
-   *  refills the queue, so wait until about half the budget has cleared. */
+   *  refills the queue, so wait until about half the budget has cleared. Requests also back off: if the last one was under 5 s ago,
+   *  the one before it did not fix things (a thin link, a long scene change), and another big keyframe right away only repeats the
+   *  problem. A quiet spell resets it. */
   _wantKey(now) {
-    if (now - this.lastKeyReq <= 400 || this.inflightBytes > this._byteBudget(now) * 0.5) return false;
+    if (now - this.lastKeyReq <= this.keyGap || this.inflightBytes > this._byteBudget(now) * 0.5) return false;
+    this.keyGap = now - this.lastKeyReq < 5000 ? Math.min(3200, this.keyGap * 2) : 400;
     this.lastKeyReq = now; return true;
   }
 
   /** Bytes allowed in flight. Bounded by time, not size: what the path has actually been carrying (acked rate) times one round trip
    *  plus ~150 ms of slack. A fixed size lets a burst sit in a slow relay's queue for a second or more, and every mouse move
    *  then shows up that much later. Two things keep it from starving the stream:
-   *  - a keyframe always passes the gate, so the budget never drops below ~1.25 keyframes (else every delta behind it is discarded
+   *  - a keyframe always passes the gate, so while calm the budget never drops below ~2 keyframes (the keyframe and the delta behind it; after a drop, ~1.25) (else every delta behind it is discarded
    *    until the keyframe is acked, which reads as congestion and steps the level down);
    *  - while the link has been calm the level's own target rate is assumed, so a screen that wakes up after a static spell is not
    *    held to the near-zero rate it showed while idle. After a drop, the measured rate rules. */
@@ -77,10 +80,10 @@ export class QualityController {
     const l = LADDER[this.level];
     const target = l.bitrate / 8;
     const ceiling = Math.max(256 * 1024, target * 0.25);
-    const floor = Math.max(64 * 1024, this.keyBytes * 1.25);
-    if (this.rttMin === Infinity) return Math.max(floor, ceiling);
+    if (this.rttMin === Infinity) return Math.max(64 * 1024, this.keyBytes * 2, ceiling);
     const ackRate = this.ackedBytes.reduce((a, [, b]) => a + b, 0) / 3;   // B/s over the last 3 s
     const calm = now - this.lastCongestion > 3000;
+    const floor = Math.max(64 * 1024, this.keyBytes * (calm ? 2 : 1.25));   // calm: a keyframe plus the delta behind it; after a drop: just the keyframe
     const rate = calm ? Math.max(ackRate, target) : ackRate;
     return Math.max(floor, Math.min(ceiling, rate * (this.rttMin / 1000 + 0.15)));
   }

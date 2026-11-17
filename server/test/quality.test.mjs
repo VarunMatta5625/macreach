@@ -57,9 +57,9 @@ test('the in-flight cap on a 400 ms path leaves room for a burst', () => {
 
 /** Simulated link: fixed capacity plus propagation delay, FIFO queue, keyframes on request. A static spell (tiny frames) comes first,
  *  then motion at `frameBytes`. Returns the worst send-to-ack time during motion, the level it ended on and how many frames got through. */
-function simulate({ capBps, propMs, frameBytes, fps, seconds, level = 1, maxLevel = level, keyMul = 3, staticSeconds = 6 }) {
+function simulate({ capBps, propMs, frameBytes, fps, seconds, level = 1, maxLevel = level, keyMul = 3, staticSeconds = 6, sceneFrames = 0, sceneBytes = 0 }) {
   const q = new QualityController({ level, maxLevel, auto: true }); q.lastChange = 0;
-  const events = []; let seq = 0, linkFree = 0, worst = 0, wantKey = false, lowest = level, sent = 0, offered = 0;
+  const events = []; let seq = 0, linkFree = 0, worst = 0, wantKey = false, lowest = level, sent = 0, offered = 0, keys = 0, moved = 0;
   for (let i = 0; i < 5; i++) { const t = i * 100; q.onSent(++seq, 2000, t); events.push([t + propMs + (2000 * 8 / capBps) * 1000, seq, t]); }   // establishes rttMin
   const step = Math.round(1000 / fps), motionAt = 1000 + staticSeconds * 1000;
   for (let t = 1000; t < motionAt + seconds * 1000; t += 5) {
@@ -68,19 +68,19 @@ function simulate({ capBps, propMs, frameBytes, fps, seconds, level = 1, maxLeve
     if (t % step < 5) {
       const moving = t >= motionAt;
       const key = wantKey; wantKey = false;                       // the encoder answers a keyframe request with a (bigger) keyframe
-      const bytes = key ? frameBytes * keyMul : moving ? frameBytes : 1000;
-      if (moving) offered++;
+      const bytes = key ? frameBytes * keyMul : moving ? (moved < sceneFrames ? sceneBytes : frameBytes) : 1000;   // a scene change (a window opening) is a run of big deltas
+      if (moving) { offered++; moved++; }
       const g = q.gate(key, bytes, t);
       if (g.needKeyframe) wantKey = true;
       if (g.send) {
-        if (moving) sent++;
+        if (moving) { sent++; if (key) keys++; }
         q.onSent(++seq, bytes, t);
         const start = Math.max(t, linkFree); linkFree = start + (bytes * 8 / capBps) * 1000;
         events.push([linkFree + propMs, seq, t]); events.sort((a, b) => a[0] - b[0]);
       }
     }
   }
-  return { worst, lowest, level: q.level, delivered: sent / offered };
+  return { worst, lowest, level: q.level, delivered: sent / offered, keys };
 }
 
 test('a burst bigger than the link does not queue more than ~0.5 s of video', () => {
@@ -93,4 +93,11 @@ test('a link that can carry the level keeps it: big keyframes and a wake-up burs
   const r = simulate({ capBps: 4_000_000, propMs: 200, frameBytes: 15_000, fps: 30, seconds: 30, level: 2, maxLevel: 2, keyMul: 10 });
   assert.equal(r.lowest, 2, 'stepped down to ' + r.lowest);
   assert.ok(r.delivered > 0.85, 'delivered only ' + Math.round(r.delivered * 100) + '% of frames');
+});
+
+test('a window opening (a run of big deltas) does not start a keyframe storm', () => {
+  // level 0 on a thin 1.5 Mbps path: 85 KB keyframes, 45 KB deltas for ~10 frames, then quiet (recorded on the phone: 6 keyframes in 3 s)
+  const r = simulate({ capBps: 1_500_000, propMs: 25, frameBytes: 6_000, fps: 15, seconds: 8, level: 0, maxLevel: 0, keyMul: 14, sceneFrames: 10, sceneBytes: 45_000 });
+  assert.ok(r.keys <= 6, 'sent ' + r.keys + ' keyframes for one scene change');
+  assert.ok(r.worst < 900, 'worst send-to-ack ' + Math.round(r.worst) + ' ms');
 });
