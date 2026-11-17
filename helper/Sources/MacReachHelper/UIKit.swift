@@ -8,6 +8,7 @@ final class ClosureButton: NSButton {
         self.handler = handler; self.target = self; self.action = #selector(fire); self.bezelStyle = .rounded
     }
     @objc private func fire() { handler?() }
+    func keyed(_ key: String) -> Self { keyEquivalent = key; return self }
 }
 
 final class ClosureCheckbox: NSButton {
@@ -26,6 +27,7 @@ final class ClosureMenuItem: NSMenuItem {
         self.handler = handler; self.target = self; self.isEnabled = enabled
     }
     @objc private func fire() { handler?() }
+    func keyed(_ key: String) -> Self { keyEquivalent = key; return self }
 }
 
 func label(_ s: String, size: CGFloat = 13, bold: Bool = false, color: NSColor = .labelColor, wrap: Bool = true) -> NSTextField {

@@ -74,6 +74,7 @@ if uiEnabled, let me = Bundle.main.bundleIdentifier {
 }
 if uiEnabled {
     StatusController.shared = StatusController()
+    MainMenu.install()
     AppState.shared.refresh()
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
         if SetupWindow.needed { SetupWindow.show(); Perms.requestAll() }   // ask for everything up front; the assistant shows live status
@@ -89,6 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch u.host ?? "" { case "setup": SetupWindow.show(); case "add-device": AddDeviceWindow.show(); default: SettingsWindow.show() }
         }
     }
+    /// Dock > Quit and anything else that asks the app to terminate: use the confirmed quit, which also stops launchd restarting us.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply { AppActions.stopUntilLogin(); return .terminateCancel }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { if uiEnabled { SettingsWindow.show() }; return true }
 }
 let appDelegate = AppDelegate()

@@ -19,6 +19,7 @@ export class QualityController {
     this.auto = auto; this.jpeg = jpeg;
     this.sent = new Map();       // seq -> { t, bytes }
     this.inflightBytes = 0;
+    this.keyBytes = 0;           // size of recent keyframes (the budget must always fit one)
     this.rttMin = Infinity; this.rtt = 0;
     this.drops = 0; this.dropsWindow = [];
     this.ackedBytes = []; // [t, bytes]
@@ -40,8 +41,8 @@ export class QualityController {
   /** Decide whether to forward a frame. Returns { send, needKeyframe }. */
   gate(key, bytes, now = Date.now()) {
     if (this.waitKey && !key) return { send: false, needKeyframe: this._wantKey(now) };
-    if (key) this.waitKey = false;
-    const over = this.sent.size >= this._maxInflight() || this.inflightBytes > this._byteBudget();
+    if (key) { this.waitKey = false; this.keyBytes = Math.max(bytes, this.keyBytes * 0.95); }   // recent keyframe size, slowly forgotten
+    const over = this.sent.size >= this._maxInflight() || this.inflightBytes > this._byteBudget(now);
     if (over && !key) {
       this.drops++; this.dropsWindow.push(now);
       if (!this.jpeg) this.waitKey = true;
@@ -61,20 +62,27 @@ export class QualityController {
   /** A keyframe is several times a delta frame. Asking for one while the path is still draining the burst that caused the drop just
    *  refills the queue, so wait until about half the budget has cleared. */
   _wantKey(now) {
-    if (now - this.lastKeyReq <= 400 || this.inflightBytes > this._byteBudget() * 0.5) return false;
+    if (now - this.lastKeyReq <= 400 || this.inflightBytes > this._byteBudget(now) * 0.5) return false;
     this.lastKeyReq = now; return true;
   }
 
   /** Bytes allowed in flight. Bounded by time, not size: what the path has actually been carrying (acked rate) times one round trip
    *  plus ~150 ms of slack. A fixed size lets a burst sit in a slow relay's queue for a second or more, and every mouse move
-   *  then shows up that much later. Falls back to a bitrate-based figure until acks have established a rate. */
-  _byteBudget() {
+   *  then shows up that much later. Two things keep it from starving the stream:
+   *  - a keyframe always passes the gate, so the budget never drops below ~1.25 keyframes (else every delta behind it is discarded
+   *    until the keyframe is acked, which reads as congestion and steps the level down);
+   *  - while the link has been calm the level's own target rate is assumed, so a screen that wakes up after a static spell is not
+   *    held to the near-zero rate it showed while idle. After a drop, the measured rate rules. */
+  _byteBudget(now = Date.now()) {
     const l = LADDER[this.level];
-    const ceiling = Math.max(256 * 1024, (l.bitrate / 8) * 0.25);
+    const target = l.bitrate / 8;
+    const ceiling = Math.max(256 * 1024, target * 0.25);
+    const floor = Math.max(64 * 1024, this.keyBytes * 1.25);
+    if (this.rttMin === Infinity) return Math.max(floor, ceiling);
     const ackRate = this.ackedBytes.reduce((a, [, b]) => a + b, 0) / 3;   // B/s over the last 3 s
-    if (this.rttMin === Infinity || ackRate <= 0) return ceiling;
-    const rate = Math.max(ackRate, (l.bitrate / 8) * 0.25);               // never starve a screen that just started moving
-    return Math.min(ceiling, Math.max(64 * 1024, rate * (this.rttMin / 1000 + 0.15)));
+    const calm = now - this.lastCongestion > 3000;
+    const rate = calm ? Math.max(ackRate, target) : ackRate;
+    return Math.max(floor, Math.min(ceiling, rate * (this.rttMin / 1000 + 0.15)));
   }
 
   onSent(seq, bytes, now = Date.now()) {

@@ -46,3 +46,19 @@ test('liveness: a client that is slow to answer a ping (Funnel RTT + queued vide
   hub._tick();
   assert.equal(calls.terminate, 1, '30 s of silence terminates');
 });
+
+test('a refreshed session resumes at the quality level the last one settled at', () => {
+  const { hub } = fakeHub({ video: { maxLevel: 5, defaultLevel: 3 }, clipboard: {} });
+  const client = () => ({ ws: { readyState: 1, send() {}, bufferedAmount: 0 }, session: { idHash: 'h' }, ip: '1.2.3.4', ua: '', attached: false });
+  const first = client(); hub.active = first;
+  hub._attach(first, { codecs: ['h264'], mode: 'auto' });
+  assert.equal(first.q.level, 3, 'a new session starts at the default');
+  first.q.level = 1;                                                    // the link was slow: it settled low
+  hub._release(first);
+  const second = client(); hub.active = second;
+  hub._attach(second, { codecs: ['h264'], mode: 'auto' });              // the page was refreshed: no explicit level in auto mode
+  assert.equal(second.q.level, 1, 'resumes at the earned level');
+  const other = client(); other.session = { idHash: 'someone-else' }; hub.active = other;
+  hub._attach(other, { codecs: ['h264'], mode: 'auto' });
+  assert.equal(other.q.level, 3, 'another login is not affected');
+});

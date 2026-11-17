@@ -63,6 +63,27 @@ enum Dock {
     }
 }
 
+/// Menu bar of the app while its windows are open (Dock mode). Without it Cmd+C/V/A and Cmd+W do nothing in text fields and windows.
+/// Cmd+Q goes through the same confirmed "Quit MacReach" as the menu bar item: a plain exit would only be restarted by launchd.
+enum MainMenu {
+    static func install() {
+        let main = NSMenu()
+        func add(_ title: String, _ items: [NSMenuItem]) {
+            let top = NSMenuItem(title: title, action: nil, keyEquivalent: ""); let m = NSMenu(title: title)
+            items.forEach { m.addItem($0) }; top.submenu = m; main.addItem(top)
+        }
+        func item(_ title: String, _ action: Selector?, _ key: String, _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+            let i = NSMenuItem(title: title, action: action, keyEquivalent: key); i.keyEquivalentModifierMask = mods; return i
+        }
+        add("MacReach", [item("Hide MacReach", #selector(NSApplication.hide(_:)), "h"), .separator(), ClosureMenuItem("Quit MacReach…") { AppActions.stopUntilLogin() }.keyed("q")])
+        add("Edit", [item("Undo", Selector(("undo:")), "z"), item("Redo", Selector(("redo:")), "z", [.command, .shift]), .separator(),
+                     item("Cut", #selector(NSText.cut(_:)), "x"), item("Copy", #selector(NSText.copy(_:)), "c"), item("Paste", #selector(NSText.paste(_:)), "v"),
+                     item("Select All", #selector(NSText.selectAll(_:)), "a")])
+        add("Window", [item("Close", #selector(NSWindow.performClose(_:)), "w"), item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")])
+        NSApp.mainMenu = main
+    }
+}
+
 enum Alerts {
     static func error(_ title: String, _ text: String) {
         DispatchQueue.main.async {
