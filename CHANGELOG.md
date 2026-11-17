@@ -6,6 +6,7 @@
 - "Add phone or tablet" window: app-store links, QR code of the private link, tailnet device list.
 - `macreach://settings|setup|add-device` deep links; single running instance.
 - Web: on a slow path (smoothed round trip over 120 ms) the browser shows its own pointer over the screen so it moves instantly, instead of waiting for the Mac's cursor to come back in the video.
+- Latency: the in-flight byte budget is now time-based (acked rate x round trip + 150 ms) and keyframes are requested only after the queue has drained. In a simulated 1.5 Mbps / 400 ms link the worst send-to-ack time fell from 5.2 s to 0.7 s.
 - Quality: probes the two lowest rungs after 8 s instead of 15 s, allows up to 20 frames in flight on slow relay paths (Funnel), and a refreshed session resumes at the level it had earned.
 - Fixed: reconnect loop over Funnel (liveness deadline was 500 ms, now 25 s).
 - Fixed: pause/kill no longer run `tailscale funnel reset` (it wiped the private link).

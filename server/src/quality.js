@@ -58,12 +58,23 @@ export class QualityController {
     return Math.max(MIN_INFLIGHT_FRAMES, Math.min(MAX_INFLIGHT_FRAMES, Math.ceil(fps * delay * 1.5) + 3));
   }
 
-  _wantKey(now) { if (now - this.lastKeyReq > 400) { this.lastKeyReq = now; return true; } return false; }
+  /** A keyframe is several times a delta frame. Asking for one while the path is still draining the burst that caused the drop just
+   *  refills the queue, so wait until about half the budget has cleared. */
+  _wantKey(now) {
+    if (now - this.lastKeyReq <= 400 || this.inflightBytes > this._byteBudget() * 0.5) return false;
+    this.lastKeyReq = now; return true;
+  }
 
+  /** Bytes allowed in flight. Bounded by time, not size: what the path has actually been carrying (acked rate) times one round trip
+   *  plus ~150 ms of slack. A fixed size lets a burst sit in a slow relay's queue for a second or more, and every mouse move
+   *  then shows up that much later. Falls back to a bitrate-based figure until acks have established a rate. */
   _byteBudget() {
     const l = LADDER[this.level];
-    // ~250ms worth of the target bitrate, never less than 256KB (a keyframe must fit)
-    return Math.max(256 * 1024, (l.bitrate / 8) * 0.25);
+    const ceiling = Math.max(256 * 1024, (l.bitrate / 8) * 0.25);
+    const ackRate = this.ackedBytes.reduce((a, [, b]) => a + b, 0) / 3;   // B/s over the last 3 s
+    if (this.rttMin === Infinity || ackRate <= 0) return ceiling;
+    const rate = Math.max(ackRate, (l.bitrate / 8) * 0.25);               // never starve a screen that just started moving
+    return Math.min(ceiling, Math.max(64 * 1024, rate * (this.rttMin / 1000 + 0.15)));
   }
 
   onSent(seq, bytes, now = Date.now()) {

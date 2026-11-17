@@ -54,3 +54,33 @@ test('the in-flight cap on a 400 ms path leaves room for a burst', () => {
   const q = new QualityController({ level: 2, auto: true }); q.rttMin = 400;
   assert.ok(q._maxInflight() >= 16);
 });
+
+/** Simulated link: fixed capacity plus propagation delay, FIFO queue. Returns the worst send-to-ack time after warm-up. */
+function simulate({ capBps, propMs, frameBytes, fps, seconds, level = 1 }) {
+  const q = new QualityController({ level, maxLevel: level, auto: true }); q.lastChange = 0;
+  const events = []; let seq = 0, linkFree = 0, worst = 0, wantKey = false;
+  // warm-up: small frames establish rttMin like a quiet screen would
+  for (let i = 0; i < 5; i++) { const t = i * 100; q.onSent(++seq, 2000, t); events.push([t + propMs + (2000 * 8 / capBps) * 1000, seq, t]); }
+  const step = Math.round(1000 / fps);
+  for (let t = 1000; t < 1000 + seconds * 1000; t += 5) {
+    while (events.length && events[0][0] <= t) { const [at, s, sentAt] = events.shift(); q.onAck(s, at); if (t > 6000) worst = Math.max(worst, at - sentAt); }
+    q.tick(t);
+    if (t % step < 5) {
+      const key = wantKey; wantKey = false;                       // the encoder answers a keyframe request with a (bigger) keyframe
+      const bytes = key ? frameBytes * 3 : frameBytes;
+      const g = q.gate(key, bytes, t);
+      if (g.needKeyframe) wantKey = true;
+      if (g.send) {
+        q.onSent(++seq, bytes, t);
+        const start = Math.max(t, linkFree); linkFree = start + (bytes * 8 / capBps) * 1000;
+        events.push([linkFree + propMs, seq, t]); events.sort((a, b) => a[0] - b[0]);
+      }
+    }
+  }
+  return worst;
+}
+
+test('a burst bigger than the link does not queue more than ~0.5 s of video', () => {
+  const worst = simulate({ capBps: 1_500_000, propMs: 200, frameBytes: 30_000, fps: 24, seconds: 30 });
+  assert.ok(worst < 400 + 500, 'worst send-to-ack ' + Math.round(worst) + ' ms');
+});
