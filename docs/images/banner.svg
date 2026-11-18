@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 340" width="1280" height="340" role="img" aria-labelledby="t d">
+  <title id="t">MacReach</title>
+  <desc id="d">A phone streaming and controlling a Mac over a private Tailscale link.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1220"/><stop offset="1" stop-color="#16243f"/></linearGradient>
+    <linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="870" y1="0" x2="1080" y2="0"><stop offset="0" stop-color="#0a84ff" stop-opacity="0"/><stop offset=".5" stop-color="#0a84ff"/><stop offset="1" stop-color="#30d158"/></linearGradient>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+      .flow{stroke-dasharray:6 14;animation:flow 1.4s linear infinite}
+      .back{stroke-dasharray:3 12;animation:flow 2.2s linear infinite reverse}
+      @keyframes flow{to{stroke-dashoffset:-40}}
+      .pulse{animation:pulse 2s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+      @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+    </style>
+  </defs>
+  <rect width="1280" height="340" rx="22" fill="url(#bg)"/>
+  <g opacity=".10" stroke="#9db4ff"><path d="M0 85H1280M0 170H1280M0 255H1280M160 0V340M320 0V340M480 0V340M640 0V340M800 0V340M960 0V340M1120 0V340"/></g>
+  <text x="70" y="150" font-size="76" font-weight="800" fill="#fff" letter-spacing="-1.5">MacReach</text>
+  <text x="74" y="200" font-size="26" fill="#b9c7e6">Your Mac, in any browser. Private over Tailscale.</text>
+  <g font-size="18" fill="#8fa3cc" font-weight="600"><text x="74" y="250">Hardware H.264 video  ·  touch, keyboard, clipboard, files</text></g>
+  <g font-size="17" fill="#6f84ad"><text x="74" y="285">One npm dependency. Nothing of ours to install on the device.</text></g>
+  <!-- phone -->
+  <g transform="translate(760,60)">
+    <rect width="96" height="190" rx="18" fill="#0f1a30" stroke="#5b79b8" stroke-width="3"/>
+    <rect x="8" y="14" width="80" height="150" rx="6" fill="#1b2d52"/>
+    <circle class="pulse" cx="48" cy="90" r="10" fill="#30d158"/>
+    <rect x="30" y="172" width="36" height="5" rx="2.5" fill="#5b79b8"/>
+  </g>
+  <!-- beams -->
+  <path class="flow" d="M870 140H1080" stroke="url(#beam)" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path class="back" d="M870 170H1080" stroke="#ff9f0a" stroke-width="3" fill="none" stroke-linecap="round" opacity=".85"/>
+  <g font-size="14" fill="#9db4ff" text-anchor="middle"><text x="975" y="124">video</text><text x="975" y="198" fill="#ffb74a">mouse + keys</text></g>
+  <!-- mac -->
+  <g transform="translate(1090,70)">
+    <rect width="150" height="104" rx="10" fill="#0f1a30" stroke="#5b79b8" stroke-width="3"/>
+    <rect x="8" y="8" width="134" height="86" rx="4" fill="#1b2d52"/>
+    <path d="M55 104h40l8 22H47z" fill="#5b79b8"/><rect x="38" y="126" width="74" height="6" rx="3" fill="#5b79b8"/>
+    <circle cx="124" cy="22" r="6" fill="#ff3b30" class="pulse"/>
+    <text x="75" y="60" text-anchor="middle" font-size="15" fill="#cfe0ff" font-weight="700">In use</text>
+  </g>
+</svg>

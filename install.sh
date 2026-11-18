@@ -29,11 +29,12 @@ echo "swift $SWV ok"
 
 say "Node.js"
 if ! command -v node >/dev/null 2>&1; then
-  [ "$HAVE_BREW" = 1 ] || die "Node.js 20+ is required. Install Homebrew (https://brew.sh) or Node from https://nodejs.org, then run ./install.sh again."
+  [ "$HAVE_BREW" = 1 ] || die "Node.js 24.7 or newer is required. Install Homebrew (https://brew.sh) or Node from https://nodejs.org, then run ./install.sh again."
   brew install node
 fi
-NV="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NV" -ge 20 ] || die "Node.js 20 or newer is required (found $NV). Run: brew upgrade node"
+# crypto.argon2 (password hashing) first shipped in Node 24.7
+node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 24 || (a === 24 && b >= 7) ? 0 : 1)' \
+  || die "Node.js 24.7 or newer is required (found $(node -v)). Run: brew upgrade node"
 echo "node $(node -v) ok"
 
 say "Server dependency (ws)"

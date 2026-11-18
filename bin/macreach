@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = (f) => import(path.join(root, 'server', 'src', f));
 
-const { AUTH_FILE, SESSIONS_FILE, CTL_SOCK, DATA_DIR } = await src('paths.js');
+const { SESSIONS_FILE, CTL_SOCK } = await src('paths.js');
 const { readAuth, writeAuth, updateAuth } = await src('authstore.js');
 const { loadConfig, saveConfigPatch } = await src('config.js');
 const { audit, readAudit } = await src('audit.js');
@@ -472,7 +472,7 @@ const help = `macreach <command>
   status              server, helper, sessions, pause state
   audit [n]           last n audit-log entries
   info                machine-readable state (JSON) for the menu bar app
-  config set <key> <value>   allowTakeover | clipboardSync | idleMinutes | absoluteHours
+  config set <key> <value>   allowTakeover | clipboardSync | idleMinutes | absoluteHours | totpOnTailnet
   autostart [on|off|status]  start MacReach at login
   stop                stop everything until the next login
   kick                disconnect whoever is controlling now
@@ -483,4 +483,3 @@ const [cmd, ...args] = process.argv.slice(2);
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') { out(help); process.exit(0); }
 if (!commands[cmd]) die(`Unknown command: ${cmd}\n\n${help}`);
 try { await commands[cmd](...args); } catch (e) { die(`Error: ${e.message}`); }
-void AUTH_FILE; void DATA_DIR;

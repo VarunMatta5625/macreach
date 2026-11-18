@@ -10,7 +10,7 @@ let testMode = args.contains("--test-pattern")
 let dataDir = ("~/Library/Application Support/MacReach" as NSString).expandingTildeInPath
 let socketPath = arg("--socket") ?? dataDir + "/helper.sock"
 
-if args.contains("--version") { print("macreach-helper 1.0"); exit(0) }
+if args.contains("--version") { print("macreach-helper \(Bundled.version)"); exit(0) }
 if args.contains("--status") {
     print("{\"screen\":\(Perms.screen()),\"accessibility\":\(Perms.accessibility()),\"locked\":\(Perms.locked())}")
     exit(0)
@@ -41,7 +41,7 @@ func statusJSON() -> [String: Any] {
     let list = Displays.list(testPattern: testMode)
     return ["t": "status", "screen": testMode ? true : Perms.screen(), "accessibility": testMode ? true : Perms.accessibility(),
             "locked": Perms.locked(), "test": testMode, "streaming": streamer.running, "error": streamer.lastError ?? NSNull(),
-            "displays": list.map { $0.json }, "display": streamer.currentDisplay.json, "version": "1.0", "pid": Int(getpid())]
+            "displays": list.map { $0.json }, "display": streamer.currentDisplay.json, "version": Bundled.version, "pid": Int(getpid())]
 }
 
 func dbl(_ o: [String: Any], _ k: String) -> Double { (o[k] as? NSNumber)?.doubleValue ?? 0 }

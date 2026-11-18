@@ -1,6 +1,9 @@
 # MacReach: development log
 
-Engineering decisions, gotchas and verification notes, newest at the bottom. (Written while the project was built in many sessions; the first section is the original design.)
+Engineering decisions, gotchas and verification notes, newest at the bottom. This is a **history**, written while the project was built in many sessions; the first section is the original design. Where a later entry or the code disagrees with an early one, the later entry and the code win, and the early line carries a note in square brackets. For how things work today read [ARCHITECTURE.md](ARCHITECTURE.md); for what changed per release read [CHANGELOG.md](../CHANGELOG.md).
+
+> [!NOTE]
+> Working files named below (`PROGRESS.md`, `USER-STEPS.md`) were scratch notes during the build and are not in the repository. Their content now lives in [SETUP.md](SETUP.md) and this log.
 
 Goal: browser-based remote control of this Mac from any device, via Tailscale Serve (private) + Funnel (public).
 Original brief is long; the essentials are captured below. Build everything possible without user passwords;
@@ -13,7 +16,7 @@ Runtime data dir: ~/Library/Application Support/MacReach/  (config.json, auth.js
   ScreenCaptureKit -> VideoToolbox H.264 (AVCC + avcC description, no B-frames, RealTime) | JPEG fallback; CGEvent input; NSPasteboard clipboard; power assertions;
   synthetic test-pattern source (`--test-pattern`) so pipeline is testable without Screen Recording permission.
   Listens on a Unix socket (0600). Framing: [1B type][4B BE len][payload].
-- `server/`  Node (v25, only dep `ws`). 127.0.0.1 only. node:crypto argon2 (async), TOTP, sessions, rate limits, CSRF, CSP, audit log, WS bridge, file transfer over plain HTTP streams, adaptive quality controller.
+- `server/`  Node (v25 on the dev Mac [the bundled app ships v24.22.3; the floor is 24.7 for `crypto.argon2`], only dep `ws`). 127.0.0.1 only. node:crypto argon2 (async), TOTP, sessions, rate limits, CSRF, CSP, audit log, WS bridge, file transfer over plain HTTP streams, adaptive quality controller.
 - `web/`  vanilla ES modules, no build step. WebCodecs VideoDecoder -> canvas; JPEG fallback. All timing thresholds in web/js/config.js.
 - `bin/macreach`  CLI: set-password, set-username, totp, status, doctor, audit, access (pause/resume tunnel), etc.
 - `scripts/`  build/sign/install LaunchAgents, tailscale setup.
@@ -31,23 +34,17 @@ Runtime data dir: ~/Library/Application Support/MacReach/  (config.json, auth.js
 - No sudo/passwords during build. Do not run `macreach set-password` ever. Do not make public (Funnel) without explicit user confirmation.
 
 ## Milestones (tick when DONE+VERIFIED)
-- [x] M0 PROGRESS.md + memory pointer
+- [x] M0 PROGRESS.md + memory pointer [scratch file, not in the repo]
 - [x] M1 signing identity (own keychain, self-signed) + verify designated requirement not cdhash
 - [x] M2 Swift helper: UDS, test pattern, VT H.264 encode, JPEG fallback
-- [~] M3 (SCK capture/input/clipboard code written, UNTESTED: needs TCC grants) Swift helper: SCK capture, input injection, clipboard, power, displays, permission status
+- [x] M3 Swift helper: SCK capture, input injection, clipboard, power, displays, permission status [written untested at first; verified later on the real Mac with a real phone]
 - [x] M4 Node server: config, auth (argon2, sessions, rate-limit, lockout, CSRF, audit, TOTP+recovery), static, WS bridge, takeover, files, adaptive quality
-- [~] M5 (all modules written; mouse+video e2e verified; touch/IME/clipboard/files need e2e) Web client: login, video, mouse, touch (direct/trackpad), keyboard (physical+IME+toolbar), clipboard, files, responsive UI, device detection
-- [ ] M6 E2E verification (Playwright/Chrome w/ test pattern; unit tests for input mapping)
-- [ ] M7 LaunchAgents (helper app + server), auto-start, `macreach` CLI installed on PATH
-- [ ] M8 Tailscale: install/choose variant, Serve config prepared (login = user step), Funnel prepared (needs user OK), public-URL reachability check
-- [ ] M9 doctor command + final card + USER STEPS list
+- [x] M5 [touch, IME, clipboard and files were verified later; real iOS Safari is still untested] Web client: login, video, mouse, touch (direct/trackpad), keyboard (physical+IME+toolbar), clipboard, files, responsive UI, device detection
+- [x] M6 E2E verification (Playwright/Chrome w/ test pattern; 32 server tests today)
+- [x] M7 LaunchAgents (helper app + server), auto-start, `macreach` CLI installed on PATH
+- [x] M8 Tailscale: install/choose variant, Serve config prepared (login = user step), Funnel prepared (needs user OK), public-URL reachability check
+- [x] M9 doctor command + final card + USER STEPS list [now docs/SETUP.md]
 - [x] M10 polish: cursor overlay, adaptive tuning, docs
-
-## Decisions log
-(append below)
-
-## USER STEPS (to be done together at the end)
-(append below as discovered)
 
 ## Decisions log
 - Test harness (no real Mac perms): helper `--test-pattern --socket /tmp/mr/h.sock --input-log /tmp/mr/in.log`; server `MACREACH_DATA_DIR=/tmp/mrdata MACREACH_HELPER_SOCK=/tmp/mr/h.sock MACREACH_PORT=7879 node server/src/index.js`; test creds in /tmp/mrdata/auth.json (user test / test-password-123; made by /tmp/mkauth.mjs, throwaway, NOT the real password). Unix socket path must be <104 chars (use /tmp/mr).
@@ -89,11 +86,11 @@ Runtime data dir: ~/Library/Application Support/MacReach/  (config.json, auth.js
 - State push: `Hub.pushSession()` sends `{c:'session',...}` to the helper from `_activate`, `_release`, ctl reload and on every helper reconnect. Helper resets to idle on server disconnect. Session-start notification is posted by the helper (reads "MacReach"), rate limited to one per device per 5 min.
 - Every change goes through the CLI (single owner of pause/funnel/config logic). New CLI: `info` (JSON), `config set`, `autostart`, `stop`, `uninstall [--purge]`, `access login --open`, `access funnel --confirm`. Passwords/2FA only via a Terminal `.command` file (no Automation prompt, no GUI password field). Funnel on from the menu needs the typed phrase "go public" in a modal.
 - `install` now stops the server, copies to a staging dir and swaps (fixes the ENOENT race), and gives the helper agent a PATH. Logs rotate (>5 MB, hourly, keep last 1 MB as .log.1). `pause`/`resume` work without Tailscale installed.
-- `install.sh`: checks macOS 14+, CLT/Swift 6, Node 20+, installs ws + Tailscale, builds, signs, installs, opens the assistant. Re-run is a no-op for done steps (re-run verified on this Mac).
+- `install.sh`: checks macOS 14+, CLT/Swift 6, Node 20+ [wrong: `crypto.argon2` needs 24.7; fixed 2026-11-18], installs ws + Tailscale, builds, signs, installs, opens the assistant. Re-run is a no-op for done steps (re-run verified on this Mac).
 - Icon: `scripts/make-icons.swift` draws AppIcon.iconset (+ web PWA icons); `build-helper.sh` packs AppIcon.icns before codesign. NOTE: I overwrote the previous `make-icons.swift` (it produced the web icon-*.png) without reading it first; web icons were regenerated in the new style. Designated requirement unchanged, TCC grants survived.
 - Web: key events with empty `code` are ignored (Android IME).
 - `doctor` warns when the Tailscale node key expires in < 30 days (currently 180; recommend Disable key expiry).
-- Tests: 24/24 (new `session-push.test.mjs`).
+- Tests: 24/24 (new `session-push.test.mjs`). [32 today: later work added quality, TOTP-on-tailnet and other tests.]
 - Verified: menu bar item visible with "In use" while the phone was connected; install idempotent; doctor clean. NOT verified: opening the menu/Settings/Setup windows by clicking (not clicking the live Mac); fresh-Mac install (would risk this Mac's grants); notification banner; Setup window placement fix on the 3-display setup.
 
 ### Later 2026-11-17
@@ -106,7 +103,7 @@ Runtime data dir: ~/Library/Application Support/MacReach/  (config.json, auth.js
 - Quality controller (`quality.js`): the in-flight byte budget is time-based (acked rate x (rttMin + 150 ms)), floored at ~1.25 recent keyframes and at 64 KB, assumes the level's target rate while the link has been calm for 3 s; keyframe requests wait until the queue is half drained; idle climb out of the two lowest rungs after 8 s; frame cap 20. A first version without the keyframe floor starved the stream (every delta dropped behind a keyframe, level stepped down): the sim test "a link that can carry the level keeps it" covers it. Link simulator in `quality.test.mjs`: worst send-to-ack on a 1.5 Mbps / 400 ms link 5.2 s -> 0.7 s.
 - A refreshed session resumes at the level it had settled at (`Hub._levels`, 10 min, only in auto mode).
 - Web: stage shows the browser's own pointer when the smoothed round trip is over 120 ms (mouse/trackpad only; touch already has the local marker).
-- Measured on this Mac: nearest Tailscale relay Mumbai 37 ms; the Funnel ingress nodes are in Europe (Paris/London, reached via DERP, `tailscale ping` ~145 ms, no direct path). So ~145 ms of the ~330 ms Funnel round trip is the ingress-to-Mac leg, before the phone's own network. A relay near the Mac (small VPS in Mumbai) is the only no-Tailscale-app way to cut that; not built, would need the owner's decision (public exposure, cost).
+- Measured on this Mac: nearest Tailscale relay 37 ms; the Funnel ingress nodes are in Europe (Paris/London, reached via DERP, `tailscale ping` ~145 ms, no direct path). So ~145 ms of the ~330 ms Funnel round trip is the ingress-to-Mac leg, before the phone's own network. A relay near the Mac (a small VPS in the Mac's own region) is the only no-Tailscale-app way to cut that; not built, would need the owner's decision (public exposure, cost).
 - Helper: Dock icon while a window is open, main menu (Edit for copy/paste, Cmd+W), Cmd+Q / Dock Quit go through the confirmed "Quit MacReach" (a plain exit is restarted by launchd). Add-device list hides `funnel-ingress-node` peers.
 - Not verified: the phone numbers after the keyframe-floor change (adb dropped before the re-measure), Dock icon disappearing after the window closes, Cmd+Q dialog.
 - Phone recording over Funnel (45 s while opening windows): level stayed 0; a ~3.5 s stall (client round trip 497 ms, probably the mobile link) was followed by six 85 KB keyframes in 3 s, i.e. a keyframe storm: each scene-change delta was dropped for exceeding the byte budget, which forced another keyframe. Fix: keyframe requests back off (400 ms doubling to 3.2 s while requests come within 5 s of each other), and while calm the budget floor is 2 x keyframe size (1.25 x after a drop). Sim test "a window opening does not start a keyframe storm": 13 keyframes before, 5 after.
@@ -117,3 +114,21 @@ Runtime data dir: ~/Library/Application Support/MacReach/  (config.json, auth.js
 - Helper: opened from Finder (not by launchd) and not installed for this path/version or jobs not loaded -> refuses from /Volumes or AppTranslocation, strips quarantine from itself, runs `install`, exits; launchd's copy shows Setup. Menu: Uninstall MacReach… (CLI boots out server/tailscaled, moves the app to the Trash, the helper last).
 - Verified without touching the live install: image verifies and mounts, `codesign --verify --deep --strict` passes on a copy from the image, a simulated quarantine makes `spctl` reject it and stripping it keeps the signature valid, the bundled CLI + bundled Tailscale binary report the live state (`info`, `doctor`).
 - NOT verified: running the downloaded Node binary (the harness refused to execute it, so argon2 and the test suite have not been run with it), the Finder-launch install handoff, uninstall, update-in-place, a fresh user on another account.
+
+### Documentation and consistency pass (2026-11-18)
+
+Every Markdown file was re-read against the code, and the whole codebase was read for beginner-level inconsistencies. Found and fixed:
+
+- **Node version:** `install.sh`, README and SETUP said Node 20+, but `crypto.argon2` needs 24.7. `install.sh` now compares major and minor.
+- **Old project name:** README and SETUP told people to `cd macoanywhere`.
+- **Menu labels:** the docs said "Stop MacReach until next login…"; the menu says "Quit MacReach…". Menu labels in the docs now match `StatusItem.swift`.
+- **Version string:** "1.0" was hard-coded in three places in the helper (`--version`, the status message, the menu). It now reads the bundle version, which `build-helper.sh` takes from `VERSION`.
+- **CLI help** omitted the `totpOnTailnet` key of `config set`.
+- **Owner-voice text** in SETUP ("I will not turn this on myself", "including Claude", "already 0 on your Mac") was rewritten for strangers.
+- **Dead code** removed: unused variables and parameters (`void x;` statements, an unused `getConfig` and `silent`), a duplicated `if/else` branch in the web paste handler.
+- **README claimed "no client to install"** while private access needs the Tailscale app on the phone. It now says nothing of ours has to be installed on the device.
+
+Verified: `node --test` (32 pass), `swift build -c release`, `bash -n install.sh`. Screenshots were taken from a test-pattern stack on port 7879 with a throwaway user and from the real native windows with account details replaced by placeholders.
+
+Still **not** verified (carried over): real iOS and iPadOS Safari, a first launch on a Mac or user account that never had MacReach, uninstall from the menu, update-in-place, opening the menu bar dropdown by clicking, the notification banner, the Dock icon disappearing after a window closes, the Cmd+Q dialog.
+

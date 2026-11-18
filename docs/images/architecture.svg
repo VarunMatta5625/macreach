@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" width="1280" height="560" role="img" aria-labelledby="t d">
+  <title id="t">MacReach architecture</title>
+  <desc id="d">A browser connects over HTTPS and WebSocket through Tailscale Serve or Funnel to a Node server on 127.0.0.1:7878, which talks to the Swift helper over a Unix socket. The macreach command line talks to the server over a second, owner-only Unix socket.</desc>
+  <defs>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;fill:#e8efff}
+      .sub{fill:#9db4e8;font-size:15px}.h{font-size:21px;font-weight:700}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;fill:#8fd1ff}
+      .box{fill:#14213d;stroke:#5b79b8;stroke-width:2.5}
+      .zone{fill:none;stroke:#3a4f80;stroke-width:2;stroke-dasharray:8 8}
+      .flow{stroke:#0a84ff;stroke-width:4;fill:none;stroke-dasharray:4 12;animation:f 1.2s linear infinite}
+      .ret{stroke:#ff9f0a;stroke-width:3;fill:none;stroke-dasharray:3 11;animation:f 1.8s linear infinite reverse}
+      .ctl{stroke:#30d158;stroke-width:3;fill:none;stroke-dasharray:3 9;animation:f 2.4s linear infinite}
+      @keyframes f{to{stroke-dashoffset:-32}}
+      .tag{font-size:13px;font-weight:700;fill:#0b1220}
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9db4e8"/></marker>
+  </defs>
+  <rect width="1280" height="560" rx="22" fill="#0b1220"/>
+  <!-- browser -->
+  <rect class="box" x="40" y="150" width="230" height="200" rx="16"/>
+  <text class="h" x="155" y="188" text-anchor="middle">Browser</text>
+  <text class="sub" x="155" y="214" text-anchor="middle">phone · tablet · computer</text>
+  <rect x="62" y="232" width="186" height="30" rx="8" fill="#1d3358"/><text class="mono" x="155" y="252" text-anchor="middle">WebCodecs → canvas</text>
+  <rect x="62" y="272" width="186" height="30" rx="8" fill="#1d3358"/><text class="mono" x="155" y="292" text-anchor="middle">pointer · keys · clip</text>
+  <text class="sub" x="155" y="332" text-anchor="middle">web/ · vanilla ES modules</text>
+  <!-- tailscale -->
+  <rect class="box" x="360" y="190" width="190" height="120" rx="16"/>
+  <text class="h" x="455" y="228" text-anchor="middle">Tailscale</text>
+  <text class="sub" x="455" y="253" text-anchor="middle">Serve (private)</text>
+  <text class="sub" x="455" y="276" text-anchor="middle">Funnel (public, opt-in)</text>
+  <!-- mac zone -->
+  <rect class="zone" x="610" y="50" width="630" height="460" rx="24"/>
+  <text class="sub" x="634" y="80" style="font-weight:700;letter-spacing:.08em">YOUR MAC</text>
+  <rect class="box" x="650" y="130" width="250" height="250" rx="16"/>
+  <text class="h" x="775" y="166" text-anchor="middle">Node server</text>
+  <text class="mono" x="775" y="190" text-anchor="middle">127.0.0.1:7878</text>
+  <text class="sub" x="775" y="224" text-anchor="middle">login · sessions · CSRF · CSP</text>
+  <text class="sub" x="775" y="248" text-anchor="middle">hub (one controller)</text>
+  <text class="sub" x="775" y="272" text-anchor="middle">adaptive quality ladder</text>
+  <text class="sub" x="775" y="296" text-anchor="middle">files · audit log · TOTP</text>
+  <text class="sub" x="775" y="350" text-anchor="middle">server/src/ · one dependency: ws</text>
+  <rect class="box" x="990" y="130" width="220" height="250" rx="16"/>
+  <text class="h" x="1100" y="166" text-anchor="middle">Swift helper</text>
+  <text class="mono" x="1100" y="190" text-anchor="middle">MacReach.app</text>
+  <text class="sub" x="1100" y="224" text-anchor="middle">ScreenCaptureKit</text>
+  <text class="sub" x="1100" y="248" text-anchor="middle">VideoToolbox H.264 / JPEG</text>
+  <text class="sub" x="1100" y="272" text-anchor="middle">CGEvent input · clipboard</text>
+  <text class="sub" x="1100" y="296" text-anchor="middle">menu bar · Setup · Settings</text>
+  <text class="sub" x="1100" y="350" text-anchor="middle">helper/ · menu bar app</text>
+  <rect class="box" x="650" y="430" width="250" height="56" rx="14"/>
+  <text class="h" x="775" y="456" text-anchor="middle" style="font-size:19px">macreach CLI</text>
+  <text class="sub" x="775" y="476" text-anchor="middle" style="font-size:13px">install · pause · doctor · config</text>
+  <!-- flows -->
+  <path class="flow" d="M272 240H358" marker-end="url(#a)"/><path class="ret" d="M358 262H272"/>
+  <path class="flow" d="M552 240H648" marker-end="url(#a)"/><path class="ret" d="M648 262H552"/>
+  <path class="flow" d="M902 240H988" marker-end="url(#a)"/><path class="ret" d="M988 270H902"/>
+  <path class="ctl" d="M775 428V384" marker-end="url(#a)"/>
+  <!-- labels -->
+  <rect x="276" y="192" width="80" height="22" rx="11" fill="#9db4e8"/><text class="tag" x="316" y="208" text-anchor="middle">HTTPS · WS</text>
+  <rect x="565" y="192" width="70" height="22" rx="11" fill="#9db4e8"/><text class="tag" x="600" y="208" text-anchor="middle">loopback</text>
+  <rect x="904" y="192" width="82" height="22" rx="11" fill="#9db4e8"/><text class="tag" x="945" y="208" text-anchor="middle">helper.sock</text>
+  <rect x="790" y="396" width="74" height="22" rx="11" fill="#30d158"/><text class="tag" x="827" y="412" text-anchor="middle">ctl.sock</text>
+  <g font-size="14"><rect x="40" y="470" width="14" height="4" fill="#0a84ff"/><text class="sub" x="62" y="476">video</text>
+  <rect x="140" y="470" width="14" height="4" fill="#ff9f0a"/><text class="sub" x="162" y="476">input, clipboard, acks</text>
+  <rect x="330" y="470" width="14" height="4" fill="#30d158"/><text class="sub" x="352" y="476">owner-only control socket (0600)</text></g>
+</svg>

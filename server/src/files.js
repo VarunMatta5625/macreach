@@ -90,7 +90,6 @@ export async function upload(cfg, req, name, dir) {
   await fsp.mkdir(target, { recursive: true });
   if (dir) { const st = await fsp.stat(target); if (!st.isDirectory()) throw httpErr(400, 'not a directory'); }
   const real = await fsp.realpath(target);
-  if (!dir) { const roots = await realRoots(cfg); /* uploadDir is allowed regardless of roots */ void roots; }
   const clean = sanitizeName(name);
   const ext = path.extname(clean), stem = clean.slice(0, clean.length - ext.length);
   const max = cfg.files.maxUploadGB * 1024 ** 3;

@@ -177,9 +177,8 @@ kb.addEventListener('sticky', () => ui.setSticky(kb.sticky));
 kb.addEventListener('switcher', (e) => ui.setSwitcher(e.detail));
 kb.addEventListener('osk', (e) => { ui.mark('kbd', e.detail); document.documentElement.classList.toggle('osk-open', e.detail); setTimeout(fitViewport, 300); });
 kb.onPaste = async (e, wasCombo) => {
-  const sent = await clip.fromPasteEvent(e);
-  if (sent && wasCombo) kb.combo(['KeyV']);   // Cmd (or mapped Ctrl) is still held on the Mac
-  else if (wasCombo) kb.combo(['KeyV']);
+  await clip.fromPasteEvent(e);
+  if (wasCombo) kb.combo(['KeyV']);   // Cmd (or mapped Ctrl) is still held on the Mac
 };
 
 // ---------------------------------------------------------------- settings reactions

@@ -51,7 +51,7 @@ export class Hub {
     const cur = this.active;
     if (!cur) return this._activate(c);
     if (cur.session.idHash === c.session.idHash) { // same login reconnecting (network blip / reload)
-      this._close(cur, 4004, { t: 'replaced' }, true);
+      this._close(cur, 4004, { t: 'replaced' });
       return this._activate(c);
     }
     if (!this.config.security.allowTakeover) { this._close(c, 4005, { t: 'busy', allowTakeover: false }); return; }
@@ -85,13 +85,12 @@ export class Hub {
     this.pushSession();
   }
 
-  _close(c, code, msg, silent = false) {
+  _close(c, code, msg) {
     if (msg) this._send(c, msg);
     if (this.active === c) this._release(c);
     c.active = false; c.attached = false;
     try { c.ws.close(code, String(msg?.t || 'closed').slice(0, 100)); } catch {}
     setTimeout(() => { try { c.ws.terminate(); } catch {} }, 1500).unref?.();
-    void silent;
   }
 
   _send(c, obj) { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(obj)); }
@@ -117,13 +116,10 @@ export class Hub {
   }
 
   _onHelperJson(j) {
-    if (j.t === 'status' || j.t === 'videoConfig' || j.t === 'display' || j.t === 'streamError' || j.t === 'streamState' || j.t === 'clip') {
-      const c = this.active;
-      if (c && FORWARD_FROM_HELPER.has(j.t)) {
-        if (j.t === 'clip' && !(this.config.clipboard.sync && c.clipSync)) return;
-        this._send(c, j);
-      }
-    }
+    const c = this.active;
+    if (!c || !FORWARD_FROM_HELPER.has(j.t)) return;
+    if (j.t === 'clip' && !(this.config.clipboard.sync && c.clipSync)) return;
+    this._send(c, j);
   }
 
   _tick() {

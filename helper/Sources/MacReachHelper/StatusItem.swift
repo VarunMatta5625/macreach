@@ -116,6 +116,6 @@ final class StatusController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Quit MacReach…") { AppActions.stopUntilLogin() })
         if Bundled.isBundled { menu.addItem(ClosureMenuItem("Uninstall MacReach…") { AppActions.uninstall() }) }
-        let v = NSMenuItem(title: "MacReach 1.0", action: nil, keyEquivalent: ""); v.isEnabled = false; menu.addItem(v)
+        let v = NSMenuItem(title: "MacReach \(Bundled.version)", action: nil, keyEquivalent: ""); v.isEnabled = false; menu.addItem(v)
     }
 }

@@ -19,4 +19,4 @@ MacReach: first run
 
 If the Mac's firewall is on, macOS may ask whether "tailscaled" can accept incoming connections: click Allow. (If you click Deny, Tailscale still works through its relay servers, only slower.)
 
-Requires macOS 14 or newer on an Apple Silicon Mac (M1 or later; Intel Macs are not supported by this download). To remove MacReach: menu bar icon > Uninstall MacReach.
+Requires macOS 14 or newer on an Apple Silicon Mac (M1 or later; Intel Macs are not supported by this download). To remove MacReach: menu bar icon > Uninstall MacReach…

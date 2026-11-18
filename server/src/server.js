@@ -24,7 +24,7 @@ const TYPES = {
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8',
 };
 
-export function createServer({ config, helper, getConfig }) {
+export function createServer({ config, helper }) {
   const sessions = new Sessions(config);
   const hub = new Hub({ config, helper, sessions });
   const limiter = new LoginLimiter(config.security, (ev) => {
@@ -179,8 +179,6 @@ export function createServer({ config, helper, getConfig }) {
 
     try {
       if (p === '/api/session' && req.method === 'GET') {
-        const id = parseCookies(req.headers.cookie)[COOKIE];
-        void id;
         return send(req, res, 200, { user: s.user, csrf: s.csrf, created: s.created, lastActive: s.lastActive, limits: sessions.limits(s.remember), clipboard: config.clipboard.sync, uploadDir: config.files.uploadDir, takeover: config.security.allowTakeover });
       }
       if (p === '/api/logout' && req.method === 'POST') {

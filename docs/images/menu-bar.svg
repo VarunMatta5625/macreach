@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 680" width="1280" height="680" role="img" aria-labelledby="t d">
+  <title id="t">MacReach menu bar states</title>
+  <desc id="d">Illustration of the four menu bar icon states and the menu, using the real menu labels.</desc>
+  <defs><style>
+    text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;fill:#e8efff}
+    .sub{fill:#9db4e8;font-size:15px}.h{font-size:20px;font-weight:700}
+    .bar{fill:#1c1c1e;stroke:#3a3a3c;stroke-width:1.5}
+    .menu{fill:#2a2a2d;stroke:#48484a;stroke-width:1.5}
+    .it{font-size:15px;fill:#f2f2f7}.dim{fill:#8e8e93}.warn{fill:#ff9f0a}
+    .blink{animation:b 1.6s ease-in-out infinite}@keyframes b{0%,100%{opacity:.55}50%{opacity:1}}
+  </style></defs>
+  <rect width="1280" height="680" rx="22" fill="#0b1220"/>
+  <text class="h" x="40" y="48">The menu bar icon tells you what is happening</text>
+  <!-- four states -->
+  <g transform="translate(40,80)">
+    <rect class="bar" width="270" height="44" rx="10"/><rect x="22" y="12" width="22" height="16" rx="3" fill="none" stroke="#f2f2f7" stroke-width="2"/><path d="M28 34h10" stroke="#f2f2f7" stroke-width="2"/>
+    <text class="it" x="60" y="29">Ready</text><text class="sub" x="0" y="72">Nobody connected.</text></g>
+  <g transform="translate(340,80)">
+    <rect class="bar" width="270" height="44" rx="10"/><g class="blink"><rect x="22" y="12" width="22" height="16" rx="3" fill="none" stroke="#ff453a" stroke-width="2"/><path d="M28 34h10" stroke="#ff453a" stroke-width="2"/><text x="56" y="29" font-size="15" font-weight="700" style="fill:#ff453a">In use</text></g>
+    <text class="sub" x="0" y="72">A device is controlling this Mac.</text></g>
+  <g transform="translate(640,80)">
+    <rect class="bar" width="270" height="44" rx="10"/><circle cx="33" cy="22" r="10" fill="none" stroke="#f2f2f7" stroke-width="2"/><path d="M30 17v10M36 17v10" stroke="#f2f2f7" stroke-width="2"/>
+    <text class="it" x="56" y="29">Paused</text><text class="sub" x="0" y="72">Every request is refused (503).</text></g>
+  <g transform="translate(940,80)">
+    <rect class="bar" width="270" height="44" rx="10"/><path d="M33 11l12 22H21z" fill="none" stroke="#ff9f0a" stroke-width="2" stroke-linejoin="round"/><path d="M33 18v7M33 28v1" stroke="#ff9f0a" stroke-width="2"/>
+    <text class="it" x="56" y="29">Needs a permission</text><text class="sub" x="0" y="72">Screen Recording or Accessibility.</text></g>
+  <!-- menu mock: in use -->
+  <g transform="translate(40,170)">
+    <rect class="menu" width="360" height="490" rx="12"/>
+    <text class="it" x="22" y="34" style="font-weight:700">● In use remotely</text>
+    <text class="it dim" x="22" y="58">   Pixel 8 · 100.64.0.7</text>
+    <text class="it dim" x="22" y="80">   connected 4 min</text>
+    <text class="it" x="22" y="112">Disconnect session</text>
+    <path d="M12 128H348" stroke="#48484a"/>
+    <text class="it" x="22" y="154">Pause remote access</text>
+    <text class="it" x="22" y="182">Sign out all devices…</text>
+    <path d="M12 198H348" stroke="#48484a"/>
+    <text class="it" x="22" y="224">Copy private link</text>
+    <text class="it" x="22" y="252">Open on this Mac</text>
+    <text class="it warn" x="22" y="280">⚠︎ Public access is ON</text>
+    <text class="it" x="22" y="306">Turn public access off</text>
+    <path d="M12 322H348" stroke="#48484a"/>
+    <text class="it" x="22" y="348">Add phone or tablet…</text>
+    <text class="it" x="22" y="374">Settings…</text>
+    <text class="it" x="22" y="400">Setup assistant…</text>
+    <path d="M12 414H348" stroke="#48484a"/>
+    <text class="it" x="22" y="440">Quit MacReach…</text>
+    <text class="it" x="22" y="464">Uninstall MacReach…</text>
+    <text class="it dim" x="22" y="484" style="font-size:12px">MacReach 1.0.0</text>
+  </g>
+  <!-- notes -->
+  <g transform="translate(450,190)" font-size="17">
+    <text class="h" x="0" y="0">What each item does</text>
+    <g class="it" font-size="16">
+      <text x="0" y="40"><tspan style="font-weight:700">Disconnect session</tspan> <tspan class="sub">ends the current controller (greyed out when nobody is connected)</tspan></text>
+      <text x="0" y="74"><tspan style="font-weight:700">Pause remote access</tspan> <tspan class="sub">refuses every request until you resume; also switches Funnel off</tspan></text>
+      <text x="0" y="108"><tspan style="font-weight:700">Sign out all devices…</tspan> <tspan class="sub">every browser must log in again</tspan></text>
+      <text x="0" y="142"><tspan style="font-weight:700">Copy private link</tspan> <tspan class="sub">the https://node-….ts.net/ address</tspan></text>
+      <text x="0" y="176"><tspan style="font-weight:700">Turn public access off</tspan> <tspan class="sub">only listed while Funnel is on</tspan></text>
+      <text x="0" y="210"><tspan style="font-weight:700">Quit MacReach…</tspan> <tspan class="sub">stops everything until your next login</tspan></text>
+      <text x="0" y="244"><tspan style="font-weight:700">Uninstall MacReach…</tspan> <tspan class="sub">only in the disk-image build; moves the app to the Trash</tspan></text>
+    </g>
+    <text class="sub" x="0" y="300" font-size="15">Illustration drawn from the labels in helper/Sources/MacReachHelper/StatusItem.swift.</text>
+    <text class="sub" x="0" y="324" font-size="15">The icon turns red with “In use” (or “Local” for this Mac’s own browser).</text>
+  </g>
+</svg>
