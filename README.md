@@ -12,11 +12,98 @@
 
 **Control your own Mac from a phone, a tablet or another computer. The device needs only a browser.**
 
-[Install](#install) · [First 10 minutes](#first-10-minutes) · [How it works](#how-it-works) · [Security](#security) · [Docs](#documentation-map)
+[Setup](#setup) · [At a glance](#at-a-glance) · [Using it](#using-it) · [How it works](#how-it-works) · [Security](#security) · [Docs](#documentation-map)
 
 </div>
 
 ---
+
+## Setup
+
+From download to controlling your Mac: install, run the Setup assistant, sign in from your phone.
+
+### 1. Install
+
+There are two ways in. The disk image is for almost everyone.
+
+#### Option A: the disk image (no developer tools)
+
+1. Download `MacReach-<version>-arm64.dmg` from the [latest release](https://github.com/VarunMatta5625/macreach/releases/latest). It is about 54 MB and carries its own Node.js and Tailscale.
+2. Open it, drag **MacReach** into **Applications**, eject the image, then open MacReach.
+3. macOS blocks the first launch because the app is **not notarized** (that needs a paid Apple developer account). This happens once:
+
+<p align="center">
+  <img src="docs/images/gatekeeper.svg" alt="Three steps: macOS blocks the launch, click Open Anyway in System Settings, open MacReach again" width="100%">
+</p>
+
+   Terminal alternative: `xattr -dr com.apple.quarantine /Applications/MacReach.app`.
+4. The **Setup assistant** opens. Follow it ([step 2](#2-run-the-setup-assistant)).
+
+**Requirements:** an Apple Silicon Mac (M1 or later) on macOS 14 or newer.
+
+<details>
+<summary><b>Updating, removing, firewall prompt, building the image yourself</b></summary>
+
+- **Update:** download the new image, drag the app over the old one, open it once. It re-registers its background jobs by itself.
+- **Remove:** menu bar icon > **Uninstall MacReach…**. It moves the app to the Trash and keeps your password and settings so a reinstall picks up where you left off. `macreach uninstall --purge` deletes those too.
+- **Firewall:** with the macOS firewall on, the first start may ask whether `tailscaled` may accept incoming connections. Click **Allow**. If you click Deny, Tailscale still works through its relay servers, only slower.
+- **Build the image yourself:** [docs/RELEASING.md](docs/RELEASING.md).
+
+</details>
+
+#### Option B: build from source (Apple Silicon or Intel)
+
+You need macOS 14+, Xcode Command Line Tools with **Swift 6**, and **Node.js 24.7 or newer** (the server uses `crypto.argon2`, which first shipped in Node 24.7). Tailscale is optional and is installed with Homebrew.
+
+```sh
+git clone https://github.com/VarunMatta5625/macreach.git
+cd macreach
+./install.sh              # add --no-tailscale to skip Tailscale (then MacReach only works on this Mac)
+```
+
+`install.sh` is safe to re-run: every step that is already done is skipped. It checks your tools, installs `ws` and Tailscale, builds and signs the app, starts the three background jobs and opens the Setup assistant.
+
+### 2. Run the Setup assistant
+
+About ten minutes, start to finish.
+
+```mermaid
+flowchart TD
+    A([Open MacReach]) --> B["1. Grant Screen Recording<br/>and Accessibility"]
+    B --> C["2. Set a password<br/>(Terminal opens)"]
+    C --> D["3. Sign in to Tailscale<br/>on the Mac"]
+    D --> E["4. Turn on MagicDNS and<br/>HTTPS certificates (once)"]
+    E --> F["5. Set up the private link<br/>and disable key expiry"]
+    F --> G["6. Add a phone or tablet:<br/>Tailscale app, QR code, sign in"]
+    G --> H([You are controlling your Mac])
+    style A fill:#0a84ff,color:#fff,stroke:none
+    style H fill:#30d158,color:#0b1220,stroke:none
+```
+
+The Setup assistant shows live ticks for every step, so you always see what is left:
+
+<p align="center">
+  <img src="docs/images/setup-assistant.png" alt="The Setup assistant with numbered callouts for each row" width="100%">
+</p>
+
+Then press **Add a phone or tablet…** and follow the four steps in that window:
+
+<p align="center">
+  <img src="docs/images/add-device.png" alt="The Add a phone or tablet window with numbered steps and a QR code" width="100%">
+</p>
+
+### 3. Sign in from your phone
+
+Open the private link (the QR code does this), then sign in with the MacReach username and password you set in step 2:
+
+<p align="center">
+  <img src="docs/images/web-login.png" alt="The MacReach sign-in page with numbered callouts" width="100%">
+</p>
+
+Every step, with checks and fixes, is in the [setup guide](docs/SETUP.md).
+
+> [!IMPORTANT]
+> **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry). Otherwise Tailscale signs it out after 180 days and your link stops working. `macreach doctor` warns when fewer than 30 days remain.
 
 ## At a glance
 
@@ -53,80 +140,9 @@ flowchart LR
 | **Guided and repeatable** | A Setup assistant covers permissions, password and Tailscale. "Add phone or tablet" shows a QR code of your private link. Re-open either from the menu bar at any time. |
 | **Installable web app** | Use "Add to Home Screen" on iOS or Android for a full-screen app (it appears as "Remote"). |
 
-## Install
-
-There are two ways in. The disk image is for almost everyone.
-
-### Option A: the disk image (no developer tools)
-
-1. Download `MacReach-<version>-arm64.dmg` from the [latest release](https://github.com/VarunMatta5625/macreach/releases/latest). It is about 54 MB and carries its own Node.js and Tailscale.
-2. Open it, drag **MacReach** into **Applications**, eject the image, then open MacReach.
-3. macOS blocks the first launch because the app is **not notarized** (that needs a paid Apple developer account). This happens once:
-
-<p align="center">
-  <img src="docs/images/gatekeeper.svg" alt="Three steps: macOS blocks the launch, click Open Anyway in System Settings, open MacReach again" width="100%">
-</p>
-
-   Terminal alternative: `xattr -dr com.apple.quarantine /Applications/MacReach.app`.
-4. The **Setup assistant** opens. Follow it ([next section](#first-10-minutes)).
-
-**Requirements:** an Apple Silicon Mac (M1 or later) on macOS 14 or newer.
-
-<details>
-<summary><b>Updating, removing, firewall prompt, building the image yourself</b></summary>
-
-- **Update:** download the new image, drag the app over the old one, open it once. It re-registers its background jobs by itself.
-- **Remove:** menu bar icon > **Uninstall MacReach…**. It moves the app to the Trash and keeps your password and settings so a reinstall picks up where you left off. `macreach uninstall --purge` deletes those too.
-- **Firewall:** with the macOS firewall on, the first start may ask whether `tailscaled` may accept incoming connections. Click **Allow**. If you click Deny, Tailscale still works through its relay servers, only slower.
-- **Build the image yourself:** [docs/RELEASING.md](docs/RELEASING.md).
-
-</details>
-
-### Option B: build from source (Apple Silicon or Intel)
-
-You need macOS 14+, Xcode Command Line Tools with **Swift 6**, and **Node.js 24.7 or newer** (the server uses `crypto.argon2`, which first shipped in Node 24.7). Tailscale is optional and is installed with Homebrew.
-
-```sh
-git clone https://github.com/VarunMatta5625/macreach.git
-cd macreach
-./install.sh              # add --no-tailscale to skip Tailscale (then MacReach only works on this Mac)
-```
-
-`install.sh` is safe to re-run: every step that is already done is skipped. It checks your tools, installs `ws` and Tailscale, builds and signs the app, starts the three background jobs and opens the Setup assistant.
-
-## First 10 minutes
-
-```mermaid
-flowchart TD
-    A([Open MacReach]) --> B["1. Grant Screen Recording<br/>and Accessibility"]
-    B --> C["2. Set a password<br/>(Terminal opens)"]
-    C --> D["3. Sign in to Tailscale<br/>on the Mac"]
-    D --> E["4. Turn on MagicDNS and<br/>HTTPS certificates (once)"]
-    E --> F["5. Set up the private link<br/>and disable key expiry"]
-    F --> G["6. Add a phone or tablet:<br/>Tailscale app, QR code, sign in"]
-    G --> H([You are controlling your Mac])
-    style A fill:#0a84ff,color:#fff,stroke:none
-    style H fill:#30d158,color:#0b1220,stroke:none
-```
-
-The Setup assistant shows live ticks for every step, so you always see what is left:
-
-<p align="center">
-  <img src="docs/images/setup-assistant.png" alt="The Setup assistant with numbered callouts for each row" width="100%">
-</p>
-
-Then press **Add a phone or tablet…** and follow the four steps in that window:
-
-<p align="center">
-  <img src="docs/images/add-device.png" alt="The Add a phone or tablet window with numbered steps and a QR code" width="100%">
-</p>
-
-Every step, with checks and fixes, is in the [setup guide](docs/SETUP.md).
-
-> [!IMPORTANT]
-> **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry). Otherwise Tailscale signs it out after 180 days and your link stops working. `macreach doctor` warns when fewer than 30 days remain.
-
 ## Using it
+
+### The toolbar and shortcut bar
 
 <table>
 <tr>
@@ -139,7 +155,30 @@ Every step, with checks and fixes, is in the [setup guide](docs/SETUP.md).
 </tr>
 </table>
 
-More screens, gestures and the sign-in flow are in the [web client guide](docs/WEB-CLIENT.md).
+### More screens
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/web-tablet.png" alt="The web client on a tablet"></td>
+<td width="50%"><img src="docs/images/web-desktop.png" alt="The web client on a desktop browser with the settings panel open"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Tablet.</b> The toolbar collapses to one row.</sub></td>
+<td align="center"><sub><b>Desktop browser.</b> Settings open beside the screen.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/web-stats.png" alt="The live stats overlay"></td>
+<td width="50%"><img src="docs/images/web-takeover.png" alt="The takeover prompt when someone else is already controlling the Mac"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Live stats.</b> Resolution, bitrate, frame rate, RTT.</sub></td>
+<td align="center"><sub><b>Takeover.</b> Only one device controls at a time.</sub></td>
+</tr>
+</table>
+
+Every gesture, setting and the sign-in flow are in the [web client guide](docs/WEB-CLIENT.md).
+
+### On the Mac
 
 Day to day, use the menu bar icon or the command line:
 
