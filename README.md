@@ -10,7 +10,9 @@
 ![One npm dependency](https://img.shields.io/badge/npm%20dependencies-1%20(ws)-ff9f0a?style=flat-square)
 ![Tests](https://img.shields.io/badge/server%20tests-32%20passing-30d158?style=flat-square)
 
-**Control your own Mac from a phone, a tablet or another computer. The device needs only a browser.**
+MacReach lets you control your own Mac from a phone, tablet or another computer, using only a web browser on that device.<br>
+It streams your Mac's screen with hardware H.264 video and passes your touch, mouse, keyboard and clipboard input back, and it also supports browsing and transferring files.<br>
+It runs privately over your own Tailscale network by default, with password sign-in and a visible "in use" indicator on the Mac. Public access is a separate opt-in.
 
 <img src="docs/images/demo.gif" alt="Demo: sign in from a browser, see the Mac live, move the pointer by touch, type with the phone keyboard, check the stream statistics and browse files" width="80%">
 
