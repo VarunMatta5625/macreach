@@ -123,7 +123,7 @@ flowchart LR
 ```
 
 <p align="center">
-  <img src="docs/images/web-gallery.png" alt="The MacReach web client on a phone: toolbar, shortcut bar, settings sheet and file browser" width="100%">
+  <img src="docs/images/web-gallery.png" alt="The MacReach web client on a phone held sideways: toolbar, shortcut bar, settings sheet and file browser" width="100%">
 </p>
 
 > [!NOTE]
@@ -144,16 +144,15 @@ flowchart LR
 
 ### The toolbar and shortcut bar
 
-<table>
-<tr>
-<td width="50%"><img src="docs/images/web-toolbar.png" alt="Annotated toolbar of the web client"></td>
-<td width="50%"><img src="docs/images/web-keybar.png" alt="Annotated shortcut bar"></td>
-</tr>
-<tr>
-<td align="center"><sub>The toolbar. Every button is numbered and explained.</sub></td>
-<td align="center"><sub>The shortcut bar for ⌘ combos and function keys.</sub></td>
-</tr>
-</table>
+<p align="center">
+  <img src="docs/images/web-toolbar.png" alt="Annotated toolbar of the web client" width="100%">
+  <br><sub>The toolbar. Every button is numbered and explained.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/web-keybar.png" alt="Annotated shortcut bar" width="100%">
+  <br><sub>The shortcut bar for ⌘ combos and function keys.</sub>
+</p>
 
 ### More screens
 
