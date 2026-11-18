@@ -18,6 +18,7 @@ timeline
 ### Changed
 
 - **Documentation rewrite.** Every Markdown file was re-read against the code and rewritten for people who have never seen the project: real screenshots with numbered callouts, diagrams, the quality-controller math, and a new [web client guide](docs/WEB-CLIENT.md). Screenshots use the built-in test pattern and placeholder account details.
+- README: a demo animation, a "Why I built this" section, an "Interesting engineering" section and a status note.
 - The version shown in the app menu, `macreach-helper --version` and the helper's status message now comes from `VERSION` (through the app's `Info.plist`) instead of a hard-coded "1.0".
 - `install.sh` and the docs now require **Node.js 24.7 or newer**, the first release with `crypto.argon2`, which the server uses for password hashing. They previously said 20.
 

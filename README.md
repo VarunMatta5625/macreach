@@ -12,7 +12,14 @@
 
 **Control your own Mac from a phone, a tablet or another computer. The device needs only a browser.**
 
-[Setup](#setup) · [At a glance](#at-a-glance) · [Using it](#using-it) · [How it works](#how-it-works) · [Security](#security) · [Docs](#documentation-map)
+<img src="docs/images/demo.gif" alt="Demo: sign in from a browser, see the Mac live, move the pointer by touch, type with the phone keyboard, check the stream statistics and browse files" width="80%">
+
+<sub>Recorded against MacReach's built-in test pattern, so no real desktop appears. The green dot and the text lines are the Mac's received input.</sub>
+
+[Setup](#setup) · [Why I built this](#why-i-built-this) · [At a glance](#at-a-glance) · [Using it](#using-it) · [How it works](#how-it-works) · [Interesting engineering](#interesting-engineering) · [Security](#security) · [Docs](#documentation-map)
+
+> [!NOTE]
+> **Status:** personal project, works for me, issues welcome but no promises.
 
 </div>
 
@@ -104,6 +111,19 @@ Every step, with checks and fixes, is in the [setup guide](docs/SETUP.md).
 
 > [!IMPORTANT]
 > **Turn off key expiry for this Mac** in Tailscale's admin page (machine menu > Disable key expiry). Otherwise Tailscale signs it out after 180 days and your link stops working. `macreach doctor` warns when fewer than 30 days remain.
+
+## Why I built this
+
+I usually leave my Mac running while it works on something, and then I need to get at it from somewhere else: to check on what it is doing, grab a file, or fix a small thing without walking back to it. I wanted that to work from whatever device I had in my hand, with nothing to install on that device.
+
+That set the rules the project follows:
+
+- **A browser is the only client.** No app on the phone, tablet or other computer.
+- **Private by default.** The server listens on `127.0.0.1` only, and [Tailscale](https://tailscale.com) is the only way in. Public access is a separate, deliberate opt-in.
+- **The Mac stays usable.** It stays awake during a session, the menu bar icon turns red while someone is in, and a pause switch and a kill switch are always one command away.
+- **Small enough to understand.** A native helper, a small Node server with one dependency, and a web client with no build step.
+
+It is a personal tool first. I keep it on GitHub as a project to show how it is built, and in case it is useful to someone else. It works for me; issues are welcome, but there are no promises.
 
 ## At a glance
 
@@ -213,6 +233,19 @@ When a frame would exceed that budget it is dropped, the stream waits for the ne
 </p>
 
 The derivations, the sequence of a login and the wire format are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Interesting engineering
+
+The parts of this project that took the most thought, each with where to find it.
+
+| Problem | What MacReach does | Where |
+| --- | --- | --- |
+| **Video must feel instant on a bad link** | Latency beats smoothness. The server caps the bytes in flight to what the path carried over one round trip plus 150 ms, drops what does not fit, waits for the next keyframe and steps down a six-rung ladder. In the link simulator, on a 1.5 Mbps, 400 ms link, the worst send-to-acknowledge time fell from **5.2 s to 0.7 s**. | [`quality.js`](server/src/quality.js), [the controller](docs/ARCHITECTURE.md#the-quality-controller) |
+| **Browsers hold hardware-decoded frames back** | VideoToolbox's H.264 header omits the `bitstream_restriction` field, so a browser assumes frames may be reordered and delays them. The server rewrites the header (SPS) to declare zero reordering. Frames then appear at once, about 1.6 ms to decode. | [`h264.js`](server/src/h264.js), [Video](docs/ARCHITECTURE.md#video) |
+| **A still screen should be sharp and free** | Nothing is sent while the screen is static. After 400 ms of stillness the helper re-encodes the last frame as one keyframe at a boosted bitrate, so a still screen ends up crisp without costing bandwidth. | [`Streamer.swift`](helper/Sources/MacReachHelper/Streamer.swift), [Refinement](docs/ARCHITECTURE.md#refinement) |
+| **Phone keyboards do not behave like keyboards** | Autocorrect, emoji and dictation edit text rather than press keys. A hidden text field mirrors what you type, and the client diffs it against the previous value to send the right Backspaces and text. Multi-key sequences are paced and other input queues behind them, so corrections keep their order. | [`keyboard.js`](web/app/js/keyboard.js), [Input path](docs/ARCHITECTURE.md#input-path) |
+| **Full control of a Mac, exposed to a network** | The server only listens on loopback. Tailscale does the networking. The password is read from a terminal with echo off and stored as Argon2id. Wrong guesses are throttled before any hashing happens. One controller at a time, with an audit log. | [`SECURITY.md`](SECURITY.md) |
+| **Small on purpose** | A Swift helper, a Node server with one dependency (`ws`) and a web client with no build step, about 5,000 lines in total. The CLI is the single owner of pause, Funnel, config and install logic, and the menu bar app calls it instead of repeating it. 32 tests, including the link simulator and end-to-end runs against a test-pattern helper. | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
 ## Security
 

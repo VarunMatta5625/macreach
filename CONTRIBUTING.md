@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. MacReach is small on purpose: one Swift app, one Node server with one dependency, and a browser client with no build step. Please keep it that way.
+Thanks for looking. MacReach is a personal project that works for me: issues are welcome, but there are no promises. It is small on purpose: one Swift app, one Node server with one dependency, and a browser client with no build step. Please keep it that way.
 
 ## The map
 
@@ -85,7 +85,7 @@ Test-only knobs: `--input-log FILE` (what input arrived), `--real-clipboard` (us
 ## Documentation
 
 - Keep a doc and the code it describes in the same change. When behaviour changes, update the README, the guide that covers it, and the [CHANGELOG](CHANGELOG.md).
-- **Screenshots must not contain real data.** Use the test setup above, or replace usernames, account emails, tailnet addresses, device names and QR codes with placeholders (`demo`, `you@example.com`, `node-1a2b3c.tail1234.ts.net`). Images live in `docs/images/`.
+- **Screenshots must not contain real data.** Use the test setup above, or replace usernames, account emails, tailnet addresses, device names and QR codes with placeholders (`demo`, `you@example.com`, `node-1a2b3c.tail1234.ts.net`). Images and the demo animation live in `docs/images/`.
 - Diagrams are Mermaid or SVG so they stay editable. Math uses GitHub's `math` blocks.
 - Say what is **not** verified. [docs/DEVLOG.md](docs/DEVLOG.md) keeps a list.
 
